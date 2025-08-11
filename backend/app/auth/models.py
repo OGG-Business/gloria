@@ -2,193 +2,187 @@
 Authentication models for Banking Transfer Platform
 """
 
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Integer, Text
+import uuid
+from datetime import datetime, timedelta
+from enum import Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, Integer
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from datetime import datetime
-import enum
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from passlib.hash import bcrypt
 
-from app.common.database import Base
+from app.common.database import BaseModel
 
-class UserStatus(enum.Enum):
-    """User status"""
+class UserStatus(str, Enum):
+    """User status enumeration"""
     ACTIVE = "active"
     INACTIVE = "inactive"
     SUSPENDED = "suspended"
-    PENDING = "pending"
+    PENDING_VERIFICATION = "pending_verification"
 
-class UserRole(enum.Enum):
-    """User roles"""
-    USER = "user"
+class UserRole(str, Enum):
+    """User role enumeration"""
     ADMIN = "admin"
-    MANAGER = "manager"
-    SUPPORT = "support"
+    USER = "user"
+    COMPLIANCE_OFFICER = "compliance_officer"
+    FINANCE_OFFICER = "finance_officer"
 
-class User(Base):
+class User(BaseModel):
     """User model"""
     __tablename__ = "users"
     
-    id = Column(String(36), primary_key=True)
-    username = Column(String(50), unique=True, nullable=False, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
+    # Basic information
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    phone = Column(String(20), unique=True, index=True, nullable=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
-    hashed_password = Column(String(255), nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_verified = Column(Boolean, default=False, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    
+    # Status and verification
+    status = Column(String(20), default=UserStatus.PENDING_VERIFICATION, nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    phone_verified = Column(Boolean, default=False, nullable=False)
     mfa_enabled = Column(Boolean, default=False, nullable=False)
     mfa_secret = Column(String(255), nullable=True)
-    status = Column(enum.Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False)
+    
+    # KYC and compliance
+    kyc_status = Column(String(20), default="pending", nullable=False)
+    kyc_level = Column(Integer, default=1, nullable=False)
+    risk_score = Column(Integer, default=0, nullable=False)
     
     # Security
+    last_login = Column(DateTime(timezone=True), nullable=True)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime(timezone=True), nullable=True)
-    password_changed_at = Column(DateTime(timezone=True), nullable=True)
-    last_login = Column(DateTime(timezone=True), nullable=True)
     
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    # Metadata
+    metadata = Column(JSONB, nullable=True)
     
     # Relationships
-    accounts = relationship("Account", back_populates="user")
     roles = relationship("UserRoleAssignment", back_populates="user")
-    kyc_documents = relationship("KYCDocument", back_populates="user")
-    audit_logs = relationship("AuditLog", back_populates="user")
+    refresh_tokens = relationship("RefreshToken", back_populates="user")
+    login_attempts = relationship("LoginAttempt", back_populates="user")
+    password_resets = relationship("PasswordReset", back_populates="user")
+    sessions = relationship("Session", back_populates="user")
     
-    def __repr__(self):
-        return f"<User(id={self.id}, username={self.username}, email={self.email})>"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.id:
+            self.id = str(uuid.uuid4())
     
-    @property
-    def full_name(self) -> str:
-        """Get full name"""
-        return f"{self.first_name} {self.last_name}"
+    def set_password(self, password: str):
+        """Hash and set password"""
+        self.password_hash = bcrypt.hash(password)
     
-    @property
+    def verify_password(self, password: str) -> bool:
+        """Verify password"""
+        return bcrypt.verify(password, self.password_hash)
+    
     def is_locked(self) -> bool:
-        """Check if user is locked"""
-        if not self.locked_until:
-            return False
-        return datetime.now() > self.locked_until
+        """Check if user account is locked"""
+        if self.locked_until and datetime.utcnow() < self.locked_until:
+            return True
+        return False
     
-    def has_role(self, role: UserRole) -> bool:
-        """Check if user has specific role"""
-        return any(user_role.role == role for user_role in self.roles)
+    def increment_failed_attempts(self):
+        """Increment failed login attempts"""
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= 5:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=30)
     
-    def is_admin(self) -> bool:
-        """Check if user is admin"""
-        return self.has_role(UserRole.ADMIN)
+    def reset_failed_attempts(self):
+        """Reset failed login attempts"""
+        self.failed_login_attempts = 0
+        self.locked_until = None
 
-class UserRoleAssignment(Base):
+class UserRoleAssignment(BaseModel):
     """User role assignment model"""
-    __tablename__ = "user_roles"
+    __tablename__ = "user_role_assignments"
     
-    id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    role = Column(enum.Enum(UserRole), nullable=False)
+    role = Column(String(50), nullable=False)
     assigned_by = Column(String(36), ForeignKey("users.id"), nullable=True)
-    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
     
     # Relationships
-    user = relationship("User", back_populates="roles")
-    
-    def __repr__(self):
-        return f"<UserRoleAssignment(user_id={self.user_id}, role={self.role})>"
+    user = relationship("User", back_populates="roles", foreign_keys=[user_id])
+    assigned_by_user = relationship("User", foreign_keys=[assigned_by])
 
-class RefreshToken(Base):
+class RefreshToken(BaseModel):
     """Refresh token model"""
     __tablename__ = "refresh_tokens"
     
-    id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    token = Column(String(255), unique=True, nullable=False, index=True)
+    token = Column(String(255), unique=True, index=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    is_revoked = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    user_agent = Column(Text, nullable=True)
+    revoked_by = Column(String(36), ForeignKey("users.id"), nullable=True)
     
-    def __repr__(self):
-        return f"<RefreshToken(id={self.id}, user_id={self.user_id})>"
+    # Relationships
+    user = relationship("User", back_populates="refresh_tokens")
+    revoked_by_user = relationship("User", foreign_keys=[revoked_by])
     
-    @property
     def is_expired(self) -> bool:
         """Check if token is expired"""
-        return datetime.now() > self.expires_at
+        return datetime.utcnow() > self.expires_at
     
-    @property
     def is_valid(self) -> bool:
         """Check if token is valid"""
-        return not self.is_revoked and not self.is_expired
+        return not self.revoked and not self.is_expired()
 
-class LoginAttempt(Base):
-    """Login attempt model for security tracking"""
+class LoginAttempt(BaseModel):
+    """Login attempt model"""
     __tablename__ = "login_attempts"
     
-    id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)  # Null for failed attempts
-    username = Column(String(50), nullable=False)
-    ip_address = Column(String(45), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    email = Column(String(255), nullable=False)
+    ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
     success = Column(Boolean, nullable=False)
     failure_reason = Column(String(100), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
-    def __repr__(self):
-        return f"<LoginAttempt(id={self.id}, username={self.username}, success={self.success})>"
+    # Relationships
+    user = relationship("User", back_populates="login_attempts")
 
-class PasswordReset(Base):
+class PasswordReset(BaseModel):
     """Password reset model"""
     __tablename__ = "password_resets"
     
-    id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    token = Column(String(255), unique=True, nullable=False, index=True)
+    token = Column(String(255), unique=True, index=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    is_used = Column(Boolean, default=False, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
-    def __repr__(self):
-        return f"<PasswordReset(id={self.id}, user_id={self.user_id})>"
+    # Relationships
+    user = relationship("User", back_populates="password_resets")
     
-    @property
     def is_expired(self) -> bool:
-        """Check if reset token is expired"""
-        return datetime.now() > self.expires_at
+        """Check if token is expired"""
+        return datetime.utcnow() > self.expires_at
     
-    @property
     def is_valid(self) -> bool:
-        """Check if reset token is valid"""
-        return not self.is_used and not self.is_expired
+        """Check if token is valid"""
+        return not self.used and not self.is_expired()
 
-class Session(Base):
+class Session(BaseModel):
     """User session model"""
     __tablename__ = "sessions"
     
-    id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    session_id = Column(String(255), unique=True, nullable=False, index=True)
-    ip_address = Column(String(45), nullable=False)
+    session_id = Column(String(255), unique=True, index=True, nullable=False)
+    ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    last_activity = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
     
-    def __repr__(self):
-        return f"<Session(id={self.id}, user_id={self.user_id})>"
+    # Relationships
+    user = relationship("User", back_populates="sessions")
     
-    @property
     def is_expired(self) -> bool:
         """Check if session is expired"""
-        return datetime.now() > self.expires_at
+        return datetime.utcnow() > self.expires_at
     
-    @property
     def is_valid(self) -> bool:
         """Check if session is valid"""
-        return self.is_active and not self.is_expired
+        return self.active and not self.is_expired()

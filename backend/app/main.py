@@ -1,18 +1,22 @@
 """
-Main FastAPI application entry point
+Main FastAPI application for Banking Transfer Platform
 """
 
-import logging
-import structlog
+import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+import structlog
 import uvicorn
 
+from app.config import get_settings
 from app.common.database import init_db, check_db_connection
+from app.common.middleware import AuditMiddleware, SecurityMiddleware
 from app.common.monitoring import setup_monitoring
+
+# Import routers
 from app.auth.routes import router as auth_router
 from app.accounts.routes import router as accounts_router
 from app.transfers.routes import router as transfers_router
@@ -20,7 +24,7 @@ from app.kyc.routes import router as kyc_router
 from app.notifications.routes import router as notifications_router
 from app.admin.routes import router as admin_router
 
-# Configure structured logging
+# Setup logging
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
@@ -45,70 +49,65 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
-    logger.info("Starting Banking Transfer Platform...")
+    logger.info("Starting Banking Transfer Platform")
     
-    try:
-        # Initialize database
-        await init_db()
-        logger.info("Database initialized successfully")
-        
-        # Setup monitoring
-        setup_monitoring()
-        logger.info("Monitoring setup completed")
-        
-        # Check database connection
-        await check_db_connection()
-        logger.info("Database connection verified")
-        
-    except Exception as e:
-        logger.error(f"Startup failed: {e}")
-        raise
+    # Initialize database
+    await init_db()
+    await check_db_connection()
+    
+    # Setup monitoring
+    setup_monitoring()
+    
+    logger.info("Banking Transfer Platform started successfully")
     
     yield
     
     # Shutdown
-    logger.info("Shutting down Banking Transfer Platform...")
+    logger.info("Shutting down Banking Transfer Platform")
 
 # Create FastAPI app
 app = FastAPI(
     title="Banking Transfer Platform",
-    description="Secure banking transfers with SWIFT and IBAN support",
+    description="A complete cloud-native platform for real bank transfers (SWIFT & IBAN)",
     version="1.0.0",
-    docs_url="/docs" if True else None,  # Enable docs in development
-    redoc_url="/redoc" if True else None,
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan
 )
 
+# Get settings
+settings = get_settings()
+
 # Add middleware
 app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*"]  # Configure appropriately for production
-)
-
-app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Add custom middleware
-from app.common.middleware import AuditMiddleware, SecurityMiddleware
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(AuditMiddleware)
 app.add_middleware(SecurityMiddleware)
 
-# Root endpoint
+# Include routers
+app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(accounts_router, prefix="/accounts", tags=["Accounts"])
+app.include_router(transfers_router, prefix="/transfers", tags=["Transfers"])
+app.include_router(kyc_router, prefix="/kyc", tags=["KYC"])
+app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin"])
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "message": "Banking Transfer Platform API",
         "version": "1.0.0",
-        "status": "operational"
+        "status": "running"
     }
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -119,28 +118,18 @@ async def health_check():
         return {
             "status": "healthy",
             "database": "connected",
-            "timestamp": "2023-12-01T10:00:00Z"
+            "timestamp": asyncio.get_event_loop().time()
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
-# Metrics endpoint
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""
-    from app.common.monitoring import metrics_endpoint
-    return metrics_endpoint()
+    from app.common.monitoring import get_metrics
+    return get_metrics()
 
-# Include routers
-app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
-app.include_router(accounts_router, prefix="/accounts", tags=["Accounts"])
-app.include_router(transfers_router, prefix="/transfers", tags=["Transfers"])
-app.include_router(kyc_router, prefix="/kyc", tags=["KYC"])
-app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
-app.include_router(admin_router, prefix="/admin", tags=["Admin"])
-
-# Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler"""
@@ -150,20 +139,20 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"}
     )
 
-# 404 handler
-@app.exception_handler(404)
-async def not_found_handler(request: Request, exc: HTTPException):
-    """404 handler"""
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """HTTP exception handler"""
+    logger.warning(f"HTTP exception: {exc.status_code} - {exc.detail}")
     return JSONResponse(
-        status_code=404,
-        content={"detail": "Endpoint not found"}
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
     )
 
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
+        workers=settings.workers
     )

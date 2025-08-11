@@ -2,128 +2,148 @@
 Account models for Banking Transfer Platform
 """
 
-from sqlalchemy import Column, String, Float, DateTime, Enum, ForeignKey, Boolean, Text
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+import uuid
 from datetime import datetime
-import enum
+from enum import Enum
+from decimal import Decimal
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, Integer, Numeric, Enum as SQLEnum
+from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 
-from app.common.database import Base
+from app.common.database import BaseModel
 
-class AccountType(enum.Enum):
-    """Account types"""
-    CURRENT = "current"
-    SAVINGS = "savings"
-    BUSINESS = "business"
-
-class AccountStatus(enum.Enum):
-    """Account status"""
+class AccountStatus(str, Enum):
+    """Account status enumeration"""
     ACTIVE = "active"
+    INACTIVE = "inactive"
     SUSPENDED = "suspended"
     CLOSED = "closed"
-    PENDING = "pending"
+    PENDING_VERIFICATION = "pending_verification"
 
-class Currency(enum.Enum):
-    """Supported currencies"""
+class AccountType(str, Enum):
+    """Account type enumeration"""
+    CHECKING = "checking"
+    SAVINGS = "savings"
+    BUSINESS = "business"
+    ESCROW = "escrow"
+
+class Currency(str, Enum):
+    """Currency enumeration"""
     USD = "USD"
     EUR = "EUR"
-    CDF = "CDF"
     GBP = "GBP"
-    CHF = "CHF"
+    CDF = "CDF"  # Congolese Franc
+    XAF = "XAF"  # Central African CFA
+    XOF = "XOF"  # West African CFA
 
-class Account(Base):
+class Account(BaseModel):
     """Account model"""
     __tablename__ = "accounts"
     
-    id = Column(String(36), primary_key=True)
-    account_number = Column(String(50), unique=True, nullable=False, index=True)
-    iban = Column(String(34), unique=True, nullable=True, index=True)
+    # Basic information
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    account_number = Column(String(50), unique=True, index=True, nullable=False)
+    iban = Column(String(34), unique=True, index=True, nullable=True)
     bic = Column(String(11), nullable=True)
-    holder_name = Column(String(255), nullable=False)
-    balance = Column(Float, default=0.0, nullable=False)
-    available_balance = Column(Float, default=0.0, nullable=False)
-    blocked_amount = Column(Float, default=0.0, nullable=False)
-    status = Column(Enum(AccountStatus), default=AccountStatus.ACTIVE, nullable=False)
-    currency = Column(Enum(Currency), default=Currency.USD, nullable=False)
-    account_type = Column(Enum(AccountType), default=AccountType.CURRENT, nullable=False)
-    daily_limit = Column(Float, default=10000.0, nullable=False)
-    monthly_limit = Column(Float, default=100000.0, nullable=False)
-    daily_used = Column(Float, default=0.0, nullable=False)
-    monthly_used = Column(Float, default=0.0, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    
+    # Account details
+    name = Column(String(100), nullable=False)
+    type = Column(SQLEnum(AccountType), nullable=False)
+    currency = Column(SQLEnum(Currency), nullable=False)
+    status = Column(SQLEnum(AccountStatus), default=AccountStatus.PENDING_VERIFICATION, nullable=False)
+    
+    # Balance and limits
+    balance = Column(Numeric(20, 2), default=0, nullable=False)
+    available_balance = Column(Numeric(20, 2), default=0, nullable=False)
+    daily_limit = Column(Numeric(20, 2), nullable=True)
+    monthly_limit = Column(Numeric(20, 2), nullable=True)
+    
+    # Bank information
+    bank_name = Column(String(100), nullable=True)
+    bank_code = Column(String(20), nullable=True)
+    branch_code = Column(String(20), nullable=True)
+    country_code = Column(String(2), nullable=False)
+    
+    # Security
+    is_default = Column(Boolean, default=False, nullable=False)
+    requires_approval = Column(Boolean, default=False, nullable=False)
+    
+    # Metadata
+    metadata = Column(JSONB, nullable=True)
     
     # Relationships
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    user = relationship("User", back_populates="accounts")
-    
-    # Transfer relationships
-    outgoing_transfers = relationship("Transfer", foreign_keys="Transfer.source_account_id", back_populates="source_account")
-    incoming_transfers = relationship("Transfer", foreign_keys="Transfer.destination_account_id", back_populates="destination_account")
-    
-    # Activity relationship
+    user = relationship("User", backref="accounts")
     activities = relationship("AccountActivity", back_populates="account")
+    incoming_transfers = relationship("Transfer", foreign_keys="Transfer.recipient_account_id", back_populates="recipient_account")
+    outgoing_transfers = relationship("Transfer", foreign_keys="Transfer.sender_account_id", back_populates="sender_account")
     
-    def __repr__(self):
-        return f"<Account(id={self.id}, account_number={self.account_number}, balance={self.balance})>"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.id:
+            self.id = str(uuid.uuid4())
+        if not self.account_number:
+            self.account_number = self._generate_account_number()
     
-    def block_amount(self, amount: float) -> bool:
-        """Block amount from available balance"""
-        if self.available_balance >= amount:
-            self.available_balance -= amount
-            self.blocked_amount += amount
-            return True
-        return False
+    def _generate_account_number(self) -> str:
+        """Generate unique account number"""
+        return f"ACC{uuid.uuid4().hex[:12].upper()}"
     
-    def unblock_amount(self, amount: float) -> bool:
-        """Unblock amount back to available balance"""
-        if self.blocked_amount >= amount:
-            self.blocked_amount -= amount
-            self.available_balance += amount
-            return True
-        return False
-    
-    def debit(self, amount: float) -> bool:
-        """Debit amount from account"""
-        if self.available_balance >= amount:
-            self.available_balance -= amount
-            self.balance -= amount
-            return True
-        return False
-    
-    def credit(self, amount: float) -> bool:
-        """Credit amount to account"""
-        self.available_balance += amount
-        self.balance += amount
+    def can_debit(self, amount: Decimal) -> bool:
+        """Check if account can be debited"""
+        if self.status != AccountStatus.ACTIVE:
+            return False
+        if self.available_balance < amount:
+            return False
         return True
     
-    @property
-    def is_active(self) -> bool:
-        """Check if account is active"""
-        return self.status == AccountStatus.ACTIVE
+    def debit(self, amount: Decimal):
+        """Debit account"""
+        if not self.can_debit(amount):
+            raise ValueError("Insufficient funds or account not active")
+        self.balance -= amount
+        self.available_balance -= amount
     
-    @property
-    def can_transfer(self) -> bool:
-        """Check if account can perform transfers"""
-        return self.is_active and self.available_balance > 0
+    def credit(self, amount: Decimal):
+        """Credit account"""
+        if self.status != AccountStatus.ACTIVE:
+            raise ValueError("Account not active")
+        self.balance += amount
+        self.available_balance += amount
+    
+    def get_formatted_balance(self) -> str:
+        """Get formatted balance string"""
+        return f"{self.balance:.2f} {self.currency}"
 
-class AccountActivity(Base):
-    """Account activity model for transaction history"""
+class AccountActivity(BaseModel):
+    """Account activity model"""
     __tablename__ = "account_activities"
     
-    id = Column(String(36), primary_key=True)
     account_id = Column(String(36), ForeignKey("accounts.id"), nullable=False)
-    activity_type = Column(String(50), nullable=False)  # credit, debit, transfer_in, transfer_out
-    amount = Column(Float, nullable=False)
-    currency = Column(Enum(Currency), nullable=False)
-    description = Column(Text, nullable=True)
-    reference = Column(String(100), nullable=True)  # Transfer ID, etc.
-    balance_before = Column(Float, nullable=False)
-    balance_after = Column(Float, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    transfer_id = Column(String(36), ForeignKey("transfers.id"), nullable=True)
+    
+    # Activity details
+    type = Column(String(50), nullable=False)  # debit, credit, fee, adjustment
+    amount = Column(Numeric(20, 2), nullable=False)
+    currency = Column(SQLEnum(Currency), nullable=False)
+    balance_before = Column(Numeric(20, 2), nullable=False)
+    balance_after = Column(Numeric(20, 2), nullable=False)
+    
+    # Description
+    description = Column(Text, nullable=False)
+    reference = Column(String(100), nullable=True)
+    
+    # Metadata
+    metadata = Column(JSONB, nullable=True)
     
     # Relationships
     account = relationship("Account", back_populates="activities")
+    transfer = relationship("Transfer", backref="account_activities")
     
-    def __repr__(self):
-        return f"<AccountActivity(id={self.id}, type={self.activity_type}, amount={self.amount})>"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.id:
+            self.id = str(uuid.uuid4())
+    
+    def get_formatted_amount(self) -> str:
+        """Get formatted amount string"""
+        return f"{self.amount:.2f} {self.currency}"
