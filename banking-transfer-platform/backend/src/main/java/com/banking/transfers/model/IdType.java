@@ -8,12 +8,11 @@ public enum IdType {
     NATIONAL_ID("NATIONAL_ID", "Carte d'identité nationale"),
     DRIVERS_LICENSE("DRIVERS_LICENSE", "Permis de conduire"),
     RESIDENCE_PERMIT("RESIDENCE_PERMIT", "Permis de séjour"),
+    BIRTH_CERTIFICATE("BIRTH_CERTIFICATE", "Acte de naissance"),
     MILITARY_ID("MILITARY_ID", "Carte militaire"),
     STUDENT_ID("STUDENT_ID", "Carte d'étudiant"),
     WORK_PERMIT("WORK_PERMIT", "Permis de travail"),
     REFUGEE_ID("REFUGEE_ID", "Carte de réfugié"),
-    BIRTH_CERTIFICATE("BIRTH_CERTIFICATE", "Acte de naissance"),
-    MARRIAGE_CERTIFICATE("MARRIAGE_CERTIFICATE", "Acte de mariage"),
     OTHER("OTHER", "Autre");
 
     private final String code;

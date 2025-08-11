@@ -30,16 +30,16 @@ public class User {
 
     @Column(name = "username", unique = true, nullable = false, length = 50)
     @NotBlank(message = "Le nom d'utilisateur est obligatoire")
-    @Pattern(regexp = "^[a-zA-Z0-9_]{3,50}$", message = "Le nom d'utilisateur doit contenir 3 à 50 caractères alphanumériques et underscores")
+    @Pattern(regexp = "^[a-zA-Z0-9_]{3,50}$", message = "Le nom d'utilisateur doit contenir entre 3 et 50 caractères alphanumériques et underscores")
     private String username;
 
     @Column(name = "email", unique = true, nullable = false, length = 100)
     @NotBlank(message = "L'email est obligatoire")
-    @Email(message = "Format d'email invalide")
+    @Email(message = "L'email doit être valide")
     private String email;
 
     @Column(name = "password_hash", nullable = false)
-    @NotBlank(message = "Le hash du mot de passe est obligatoire")
+    @NotBlank(message = "Le mot de passe est obligatoire")
     private String passwordHash;
 
     @Column(name = "first_name", nullable = false, length = 50)
@@ -53,7 +53,7 @@ public class User {
     private String lastName;
 
     @Column(name = "phone", length = 20)
-    @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Format de téléphone invalide")
+    @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Le numéro de téléphone doit être valide")
     private String phone;
 
     @Column(name = "date_of_birth")
@@ -61,7 +61,7 @@ public class User {
     private LocalDate dateOfBirth;
 
     @Column(name = "nationality", length = 2)
-    @Pattern(regexp = "^[A-Z]{2}$", message = "Le code de nationalité doit être un code ISO 3166-1 alpha-2")
+    @Pattern(regexp = "^[A-Z]{2}$", message = "La nationalité doit être un code pays ISO 3166-1 alpha-2")
     private String nationality;
 
     @Column(name = "id_number", length = 50)
@@ -87,7 +87,7 @@ public class User {
     private String postalCode;
 
     @Column(name = "country", length = 2)
-    @Pattern(regexp = "^[A-Z]{2}$", message = "Le code pays doit être un code ISO 3166-1 alpha-2")
+    @Pattern(regexp = "^[A-Z]{2}$", message = "Le pays doit être un code pays ISO 3166-1 alpha-2")
     private String country;
 
     @Column(name = "occupation", length = 100)
@@ -140,11 +140,8 @@ public class User {
     @Column(name = "mfa_secret", length = 100)
     private String mfaSecret;
 
-    @Column(name = "preferred_language", length = 5)
-    private String preferredLanguage = "fr";
-
-    @Column(name = "timezone", length = 50)
-    private String timezone = "Africa/Kinshasa";
+    @Column(name = "keycloak_id", length = 100)
+    private String keycloakId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreatedDate
@@ -428,20 +425,12 @@ public class User {
         this.mfaSecret = mfaSecret;
     }
 
-    public String getPreferredLanguage() {
-        return preferredLanguage;
+    public String getKeycloakId() {
+        return keycloakId;
     }
 
-    public void setPreferredLanguage(String preferredLanguage) {
-        this.preferredLanguage = preferredLanguage;
-    }
-
-    public String getTimezone() {
-        return timezone;
-    }
-
-    public void setTimezone(String timezone) {
-        this.timezone = timezone;
+    public void setKeycloakId(String keycloakId) {
+        this.keycloakId = keycloakId;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -501,12 +490,21 @@ public class User {
         this.isLocked = false;
     }
 
-    public boolean isHighRisk() {
-        return riskLevel == RiskLevel.HIGH || riskLevel == RiskLevel.CRITICAL;
+    public void updateLastLogin() {
+        this.lastLoginDate = LocalDateTime.now();
+        this.failedLoginAttempts = 0;
     }
 
-    public boolean requiresEnhancedDueDiligence() {
-        return isHighRisk() || kycStatus == KYCStatus.PENDING || amlStatus == AMLStatus.PENDING_CLARIFICATION;
+    public boolean requiresKYC() {
+        return kycStatus == KYCStatus.NOT_VERIFIED || kycStatus == KYCStatus.PENDING;
+    }
+
+    public boolean requiresAML() {
+        return amlStatus == AMLStatus.NOT_CHECKED || amlStatus == AMLStatus.PENDING;
+    }
+
+    public boolean isHighRisk() {
+        return riskLevel == RiskLevel.HIGH || riskLevel == RiskLevel.CRITICAL;
     }
 
     @Override

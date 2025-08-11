@@ -1,141 +1,245 @@
 package com.banking.transfers.service;
 
-import dev.samstevens.totp.code.*;
-import dev.samstevens.totp.exceptions.QrGenerationException;
-import dev.samstevens.totp.qr.QrData;
-import dev.samstevens.totp.qr.QrGenerator;
-import dev.samstevens.totp.qr.ZxingPngQrGenerator;
-import dev.samstevens.totp.secret.DefaultSecretGenerator;
-import dev.samstevens.totp.time.SystemTimeProvider;
-import dev.samstevens.totp.time.TimeProvider;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.ByteBuffer;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.Base64;
 
 /**
- * Service de gestion de l'authentification à deux facteurs (MFA)
+ * Service pour l'authentification à deux facteurs (MFA)
  */
 @Service
 public class MfaService {
 
-    private final DefaultSecretGenerator secretGenerator;
-    private final TimeProvider timeProvider;
-    private final CodeGenerator codeGenerator;
-    private final CodeVerifier codeVerifier;
-    private final QrGenerator qrGenerator;
-
-    public MfaService() {
-        this.secretGenerator = new DefaultSecretGenerator();
-        this.timeProvider = new SystemTimeProvider();
-        this.codeGenerator = new DefaultCodeGenerator();
-        this.codeVerifier = new DefaultCodeVerifier(codeGenerator, timeProvider);
-        this.qrGenerator = new ZxingPngQrGenerator();
-    }
+    private static final String ALGORITHM = "HmacSHA1";
+    private static final int DIGITS = 6;
+    private static final int PERIOD = 30; // 30 secondes
+    private static final int WINDOW = 1; // Fenêtre de validation (1 période avant/après)
 
     /**
-     * Génère un secret MFA pour un utilisateur
+     * Génère un secret TOTP pour un utilisateur
      */
     public String generateSecret() {
-        return secretGenerator.generate();
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[20]; // 160 bits
+        random.nextBytes(bytes);
+        return Base64.getEncoder().encodeToString(bytes);
     }
 
     /**
-     * Génère un secret MFA avec une taille personnalisée
+     * Valide un code TOTP
+     */
+    public boolean validateCode(String secret, String code) {
+        if (secret == null || code == null || code.length() != DIGITS) {
+            return false;
+        }
+
+        try {
+            long currentTime = Instant.now().getEpochSecond();
+            long timeStep = currentTime / PERIOD;
+
+            // Vérifier le code actuel et les codes dans la fenêtre
+            for (int i = -WINDOW; i <= WINDOW; i++) {
+                String expectedCode = generateTOTP(secret, timeStep + i);
+                if (code.equals(expectedCode)) {
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Génère un code TOTP pour un instant donné
+     */
+    public String generateTOTP(String secret, long timeStep) {
+        try {
+            byte[] key = Base64.getDecoder().decode(secret);
+            byte[] time = ByteBuffer.allocate(8).putLong(timeStep).array();
+
+            Mac mac = Mac.getInstance(ALGORITHM);
+            SecretKeySpec keySpec = new SecretKeySpec(key, ALGORITHM);
+            mac.init(keySpec);
+
+            byte[] hash = mac.doFinal(time);
+            int offset = hash[hash.length - 1] & 0xf;
+
+            int binary = ((hash[offset] & 0x7f) << 24) |
+                        ((hash[offset + 1] & 0xff) << 16) |
+                        ((hash[offset + 2] & 0xff) << 8) |
+                        (hash[offset + 3] & 0xff);
+
+            int otp = binary % (int) Math.pow(10, DIGITS);
+            return String.format("%0" + DIGITS + "d", otp);
+
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new RuntimeException("Erreur lors de la génération du code TOTP", e);
+        }
+    }
+
+    /**
+     * Génère un code TOTP pour l'instant actuel
+     */
+    public String generateCurrentTOTP(String secret) {
+        long currentTime = Instant.now().getEpochSecond();
+        long timeStep = currentTime / PERIOD;
+        return generateTOTP(secret, timeStep);
+    }
+
+    /**
+     * Génère un QR code pour l'application d'authentification
+     */
+    public String generateQrCode(String secret, String email) {
+        String issuer = "Banking Transfer Platform";
+        String accountName = email;
+        
+        // Format URI pour les applications TOTP
+        String uri = String.format("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
+                issuer, accountName, secret, issuer, DIGITS, PERIOD);
+        
+        return uri;
+    }
+
+    /**
+     * Génère un QR code avec des paramètres personnalisés
+     */
+    public String generateQrCode(String secret, String email, String issuer, String accountName) {
+        if (issuer == null) {
+            issuer = "Banking Transfer Platform";
+        }
+        if (accountName == null) {
+            accountName = email;
+        }
+        
+        String uri = String.format("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
+                issuer, accountName, secret, issuer, DIGITS, PERIOD);
+        
+        return uri;
+    }
+
+    /**
+     * Vérifie si un secret est valide
+     */
+    public boolean isValidSecret(String secret) {
+        try {
+            if (secret == null || secret.trim().isEmpty()) {
+                return false;
+            }
+            
+            // Vérifier que le secret peut être décodé
+            Base64.getDecoder().decode(secret);
+            
+            // Vérifier la longueur minimale (au moins 128 bits)
+            byte[] key = Base64.getDecoder().decode(secret);
+            return key.length >= 16;
+            
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Génère un secret avec une longueur spécifique
      */
     public String generateSecret(int length) {
-        return secretGenerator.generate(length);
+        if (length < 16) {
+            throw new IllegalArgumentException("La longueur minimale du secret doit être de 16 octets");
+        }
+        
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[length];
+        random.nextBytes(bytes);
+        return Base64.getEncoder().encodeToString(bytes);
     }
 
     /**
-     * Génère un code TOTP pour un secret donné
+     * Calcule le temps restant avant le prochain code
      */
-    public String generateCode(String secret) {
-        return codeGenerator.generate(secret, timeProvider.getTime());
+    public int getTimeRemaining() {
+        long currentTime = Instant.now().getEpochSecond();
+        return (int) (PERIOD - (currentTime % PERIOD));
     }
 
     /**
-     * Valide un code MFA
+     * Vérifie si un code est expiré
      */
-    public boolean validateMfaCode(String secret, String code) {
-        if (secret == null || secret.trim().isEmpty() || 
-            code == null || code.trim().isEmpty()) {
+    public boolean isCodeExpired(String code, long timestamp) {
+        long currentTime = Instant.now().getEpochSecond();
+        long codeTime = timestamp / PERIOD;
+        long currentTimeStep = currentTime / PERIOD;
+        
+        return Math.abs(currentTimeStep - codeTime) > WINDOW;
+    }
+
+    /**
+     * Génère un code de récupération (backup code)
+     */
+    public String generateBackupCode() {
+        SecureRandom random = new SecureRandom();
+        int code = random.nextInt(100000000); // 8 chiffres
+        return String.format("%08d", code);
+    }
+
+    /**
+     * Valide un code de récupération
+     */
+    public boolean validateBackupCode(String backupCode, String storedBackupCodes) {
+        if (backupCode == null || storedBackupCodes == null) {
             return false;
         }
-
-        try {
-            return codeVerifier.isValidCode(secret, code);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Valide un code MFA avec une fenêtre de tolérance personnalisée
-     */
-    public boolean validateMfaCode(String secret, String code, int window) {
-        if (secret == null || secret.trim().isEmpty() || 
-            code == null || code.trim().isEmpty()) {
-            return false;
-        }
-
-        try {
-            return codeVerifier.isValidCode(secret, code, window);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Génère des codes de sauvegarde pour un utilisateur
-     */
-    public List<String> generateBackupCodes(int count) {
-        return IntStream.range(0, count)
-                .mapToObj(i -> generateBackupCode())
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Génère un code de sauvegarde unique
-     */
-    private String generateBackupCode() {
-        // Génère un code de 8 chiffres
-        return String.format("%08d", (int) (Math.random() * 100000000));
-    }
-
-    /**
-     * Valide un code de sauvegarde
-     */
-    public boolean validateBackupCode(String storedBackupCodes, String providedCode) {
-        if (storedBackupCodes == null || storedBackupCodes.trim().isEmpty() ||
-            providedCode == null || providedCode.trim().isEmpty()) {
-            return false;
-        }
-
-        // Les codes de sauvegarde sont stockés séparés par des virgules
+        
+        // Les codes de récupération sont stockés séparés par des virgules
         String[] codes = storedBackupCodes.split(",");
         for (String code : codes) {
-            if (code.trim().equals(providedCode.trim())) {
+            if (code.trim().equals(backupCode.trim())) {
                 return true;
             }
         }
+        
         return false;
     }
 
     /**
-     * Consomme un code de sauvegarde (le retire de la liste)
+     * Génère plusieurs codes de récupération
      */
-    public String consumeBackupCode(String storedBackupCodes, String usedCode) {
-        if (storedBackupCodes == null || storedBackupCodes.trim().isEmpty()) {
+    public String generateBackupCodes(int count) {
+        if (count < 1 || count > 10) {
+            throw new IllegalArgumentException("Le nombre de codes de récupération doit être entre 1 et 10");
+        }
+        
+        StringBuilder codes = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                codes.append(",");
+            }
+            codes.append(generateBackupCode());
+        }
+        
+        return codes.toString();
+    }
+
+    /**
+     * Supprime un code de récupération utilisé
+     */
+    public String removeBackupCode(String backupCode, String storedBackupCodes) {
+        if (backupCode == null || storedBackupCodes == null) {
             return storedBackupCodes;
         }
-
+        
         String[] codes = storedBackupCodes.split(",");
         StringBuilder remainingCodes = new StringBuilder();
         
         for (String code : codes) {
-            if (!code.trim().equals(usedCode.trim())) {
+            if (!code.trim().equals(backupCode.trim())) {
                 if (remainingCodes.length() > 0) {
                     remainingCodes.append(",");
                 }
@@ -147,216 +251,58 @@ public class MfaService {
     }
 
     /**
-     * Génère une URL QR pour l'application d'authentification
+     * Vérifie la force d'un secret
      */
-    public String generateQrUrl(String secret, String username, String issuer) {
-        QrData data = new QrData.Builder()
-                .label(username)
-                .secret(secret)
-                .issuer(issuer)
-                .algorithm(HashingAlgorithm.SHA1)
-                .digits(6)
-                .period(30)
-                .build();
-
-        return data.getUri();
-    }
-
-    /**
-     * Génère une image QR en base64
-     */
-    public String generateQrImageBase64(String secret, String username, String issuer) {
-        try {
-            QrData data = new QrData.Builder()
-                    .label(username)
-                    .secret(secret)
-                    .issuer(issuer)
-                    .algorithm(HashingAlgorithm.SHA1)
-                    .digits(6)
-                    .period(30)
-                    .build();
-
-            byte[] qrImage = qrGenerator.generate(data);
-            return java.util.Base64.getEncoder().encodeToString(qrImage);
-        } catch (QrGenerationException e) {
-            throw new RuntimeException("Erreur lors de la génération du QR code", e);
-        }
-    }
-
-    /**
-     * Génère une image QR avec des paramètres personnalisés
-     */
-    public String generateQrImageBase64(String secret, String username, String issuer, 
-                                       HashingAlgorithm algorithm, int digits, int period) {
-        try {
-            QrData data = new QrData.Builder()
-                    .label(username)
-                    .secret(secret)
-                    .issuer(issuer)
-                    .algorithm(algorithm)
-                    .digits(digits)
-                    .period(period)
-                    .build();
-
-            byte[] qrImage = qrGenerator.generate(data);
-            return java.util.Base64.getEncoder().encodeToString(qrImage);
-        } catch (QrGenerationException e) {
-            throw new RuntimeException("Erreur lors de la génération du QR code", e);
-        }
-    }
-
-    /**
-     * Vérifie si un secret MFA est valide
-     */
-    public boolean isValidSecret(String secret) {
-        if (secret == null || secret.trim().isEmpty()) {
-            return false;
-        }
-
-        // Un secret TOTP doit être au moins de 16 caractères
-        if (secret.length() < 16) {
-            return false;
-        }
-
-        // Vérifier que le secret ne contient que des caractères valides
-        return secret.matches("^[A-Z2-7]+=*$");
-    }
-
-    /**
-     * Génère un code de test pour un secret
-     */
-    public String generateTestCode(String secret) {
+    public SecretStrength checkSecretStrength(String secret) {
         if (!isValidSecret(secret)) {
-            throw new IllegalArgumentException("Secret MFA invalide");
+            return SecretStrength.WEAK;
         }
-        return generateCode(secret);
+        
+        try {
+            byte[] key = Base64.getDecoder().decode(secret);
+            int bitLength = key.length * 8;
+            
+            if (bitLength >= 256) {
+                return SecretStrength.STRONG;
+            } else if (bitLength >= 192) {
+                return SecretStrength.MEDIUM;
+            } else {
+                return SecretStrength.WEAK;
+            }
+        } catch (Exception e) {
+            return SecretStrength.WEAK;
+        }
     }
 
     /**
-     * Obtient le temps restant avant le prochain code
+     * Génère un secret fort recommandé
      */
-    public int getTimeRemaining() {
-        long currentTime = timeProvider.getTime();
-        return 30 - (int) (currentTime % 30);
+    public String generateStrongSecret() {
+        return generateSecret(32); // 256 bits
     }
 
     /**
-     * Obtient le temps écoulé depuis le début de la période actuelle
+     * Enum pour la force du secret
      */
-    public int getTimeElapsed() {
-        long currentTime = timeProvider.getTime();
-        return (int) (currentTime % 30);
-    }
+    public enum SecretStrength {
+        WEAK("Faible", "Recommandé: utiliser un secret plus long"),
+        MEDIUM("Moyen", "Acceptable pour la plupart des cas d'usage"),
+        STRONG("Fort", "Excellent niveau de sécurité");
 
-    /**
-     * Vérifie si un code est sur le point d'expirer
-     */
-    public boolean isCodeExpiringSoon(String secret) {
-        int timeRemaining = getTimeRemaining();
-        return timeRemaining <= 5; // 5 secondes ou moins
-    }
+        private final String label;
+        private final String description;
 
-    /**
-     * Génère des informations de configuration MFA pour un utilisateur
-     */
-    public MfaConfig generateMfaConfig(String username, String issuer) {
-        String secret = generateSecret();
-        String qrUrl = generateQrUrl(secret, username, issuer);
-        String qrImage = generateQrImageBase64(secret, username, issuer);
-        List<String> backupCodes = generateBackupCodes(10);
-
-        return MfaConfig.builder()
-                .secret(secret)
-                .qrUrl(qrUrl)
-                .qrImage(qrImage)
-                .backupCodes(backupCodes)
-                .backupCodesString(String.join(",", backupCodes))
-                .build();
-    }
-
-    /**
-     * Valide une configuration MFA complète
-     */
-    public boolean validateMfaConfig(MfaConfig config) {
-        if (config == null) {
-            return false;
+        SecretStrength(String label, String description) {
+            this.label = label;
+            this.description = description;
         }
 
-        // Vérifier le secret
-        if (!isValidSecret(config.getSecret())) {
-            return false;
+        public String getLabel() {
+            return label;
         }
 
-        // Vérifier l'URL QR
-        if (config.getQrUrl() == null || config.getQrUrl().trim().isEmpty()) {
-            return false;
-        }
-
-        // Vérifier les codes de sauvegarde
-        if (config.getBackupCodes() == null || config.getBackupCodes().isEmpty()) {
-            return false;
-        }
-
-        // Vérifier qu'au moins un code de sauvegarde est valide
-        return config.getBackupCodes().stream()
-                .anyMatch(code -> code != null && code.length() == 8 && code.matches("\\d{8}"));
-    }
-
-    /**
-     * Classe pour encapsuler la configuration MFA
-     */
-    public static class MfaConfig {
-        private String secret;
-        private String qrUrl;
-        private String qrImage;
-        private List<String> backupCodes;
-        private String backupCodesString;
-
-        private MfaConfig() {}
-
-        public static Builder builder() {
-            return new Builder();
-        }
-
-        // Getters
-        public String getSecret() { return secret; }
-        public String getQrUrl() { return qrUrl; }
-        public String getQrImage() { return qrImage; }
-        public List<String> getBackupCodes() { return backupCodes; }
-        public String getBackupCodesString() { return backupCodesString; }
-
-        // Builder
-        public static class Builder {
-            private MfaConfig config = new MfaConfig();
-
-            public Builder secret(String secret) {
-                config.secret = secret;
-                return this;
-            }
-
-            public Builder qrUrl(String qrUrl) {
-                config.qrUrl = qrUrl;
-                return this;
-            }
-
-            public Builder qrImage(String qrImage) {
-                config.qrImage = qrImage;
-                return this;
-            }
-
-            public Builder backupCodes(List<String> backupCodes) {
-                config.backupCodes = backupCodes;
-                return this;
-            }
-
-            public Builder backupCodesString(String backupCodesString) {
-                config.backupCodesString = backupCodesString;
-                return this;
-            }
-
-            public MfaConfig build() {
-                return config;
-            }
+        public String getDescription() {
+            return description;
         }
     }
 }

@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * DTO pour les demandes de connexion
+ * DTO pour les requêtes de connexion
  */
 public class LoginRequest {
 
@@ -20,9 +20,9 @@ public class LoginRequest {
 
     private Boolean rememberMe = false;
 
-    private String clientIp;
+    private String clientId;
 
-    private String userAgent;
+    private String redirectUri;
 
     // Constructeurs
     public LoginRequest() {}
@@ -71,20 +71,20 @@ public class LoginRequest {
         this.rememberMe = rememberMe;
     }
 
-    public String getClientIp() {
-        return clientIp;
+    public String getClientId() {
+        return clientId;
     }
 
-    public void setClientIp(String clientIp) {
-        this.clientIp = clientIp;
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
     }
 
-    public String getUserAgent() {
-        return userAgent;
+    public String getRedirectUri() {
+        return redirectUri;
     }
 
-    public void setUserAgent(String userAgent) {
-        this.userAgent = userAgent;
+    public void setRedirectUri(String redirectUri) {
+        this.redirectUri = redirectUri;
     }
 
     // Méthodes utilitaires
@@ -92,20 +92,8 @@ public class LoginRequest {
         return mfaCode != null && !mfaCode.trim().isEmpty();
     }
 
-    public boolean isRememberMeEnabled() {
-        return rememberMe != null && rememberMe;
-    }
-
-    public String getUsernameOrEmailTrimmed() {
-        return usernameOrEmail != null ? usernameOrEmail.trim() : null;
-    }
-
-    public String getPasswordTrimmed() {
-        return password != null ? password.trim() : null;
-    }
-
-    public String getMfaCodeTrimmed() {
-        return mfaCode != null ? mfaCode.trim() : null;
+    public boolean isOAuthRequest() {
+        return clientId != null && !clientId.trim().isEmpty();
     }
 
     @Override
@@ -114,8 +102,8 @@ public class LoginRequest {
                 "usernameOrEmail='" + usernameOrEmail + '\'' +
                 ", mfaCode='" + (mfaCode != null ? "***" : "null") + '\'' +
                 ", rememberMe=" + rememberMe +
-                ", clientIp='" + clientIp + '\'' +
-                ", userAgent='" + userAgent + '\'' +
+                ", clientId='" + clientId + '\'' +
+                ", redirectUri='" + redirectUri + '\'' +
                 '}';
     }
 }

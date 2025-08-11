@@ -18,7 +18,7 @@ public enum SourceOfFunds {
     INTEREST("INTEREST", "Intérêts"),
     PENSION("PENSION", "Pension"),
     SOCIAL_BENEFITS("SOCIAL_BENEFITS", "Prestations sociales"),
-    REMITTANCE("REMITTANCE", "Transfert de fonds"),
+    REMITTANCE("REMITTANCE", "Transfert d'argent"),
     CRYPTO_CURRENCY("CRYPTO_CURRENCY", "Cryptomonnaie"),
     GAMBLING_WINNINGS("GAMBLING_WINNINGS", "Gains de jeux"),
     OTHER("OTHER", "Autre");
@@ -61,10 +61,6 @@ public enum SourceOfFunds {
     public boolean isRegularIncome() {
         return this == SALARY || this == BUSINESS_INCOME || this == RENTAL_INCOME || 
                this == PENSION || this == SOCIAL_BENEFITS;
-    }
-
-    public boolean isInvestmentRelated() {
-        return this == INVESTMENT_INCOME || this == DIVIDENDS || this == INTEREST;
     }
 
     @Override

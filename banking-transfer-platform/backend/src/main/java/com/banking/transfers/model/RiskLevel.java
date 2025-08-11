@@ -1,13 +1,13 @@
 package com.banking.transfers.model;
 
 /**
- * Niveaux de risque pour les utilisateurs
+ * Niveaux de risque des utilisateurs
  */
 public enum RiskLevel {
-    LOW("LOW", "Faible", 0, 30),
-    MEDIUM("MEDIUM", "Moyen", 31, 60),
-    HIGH("HIGH", "Élevé", 61, 80),
-    CRITICAL("CRITICAL", "Critique", 81, 100);
+    LOW("LOW", "Faible", 0, 25),
+    MEDIUM("MEDIUM", "Moyen", 26, 50),
+    HIGH("HIGH", "Élevé", 51, 75),
+    CRITICAL("CRITICAL", "Critique", 76, 100);
 
     private final String code;
     private final String description;
@@ -43,7 +43,7 @@ public enum RiskLevel {
                 return level;
             }
         }
-        return CRITICAL; // Par défaut, niveau critique si score hors limites
+        return CRITICAL; // Par défaut si le score est hors limites
     }
 
     public static RiskLevel fromCode(String code) {
@@ -74,30 +74,15 @@ public enum RiskLevel {
     public int getMaxTransactionLimit() {
         switch (this) {
             case LOW:
-                return 100000; // 100k USD
+                return 10000; // 10k USD
             case MEDIUM:
-                return 50000;  // 50k USD
+                return 5000;  // 5k USD
             case HIGH:
-                return 10000;  // 10k USD
+                return 1000;  // 1k USD
             case CRITICAL:
-                return 1000;   // 1k USD
+                return 0;     // Aucune transaction autorisée
             default:
-                return 1000;
-        }
-    }
-
-    public String getMonitoringFrequency() {
-        switch (this) {
-            case LOW:
-                return "MONTHLY";
-            case MEDIUM:
-                return "WEEKLY";
-            case HIGH:
-                return "DAILY";
-            case CRITICAL:
-                return "REAL_TIME";
-            default:
-                return "WEEKLY";
+                return 0;
         }
     }
 
