@@ -32,10 +32,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmail(String email);
 
     /**
-     * Trouve un utilisateur par son nom d'utilisateur ou email
+     * Trouve un utilisateur par son nom d'utilisateur et vérifie qu'il est actif
      */
-    @Query("SELECT u FROM User u WHERE u.username = :identifier OR u.email = :identifier")
-    Optional<User> findByUsernameOrEmail(@Param("identifier") String identifier);
+    Optional<User> findByUsernameAndIsActiveTrue(String username);
+
+    /**
+     * Trouve un utilisateur par son email et vérifie qu'il est actif
+     */
+    Optional<User> findByEmailAndIsActiveTrue(String email);
 
     /**
      * Trouve un utilisateur par son numéro d'identité
@@ -43,69 +47,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByIdNumber(String idNumber);
 
     /**
-     * Trouve tous les utilisateurs actifs
+     * Trouve un utilisateur par son numéro d'identité et son type
      */
-    List<User> findByIsActiveTrue();
-
-    /**
-     * Trouve tous les utilisateurs verrouillés
-     */
-    List<User> findByIsLockedTrue();
-
-    /**
-     * Trouve les utilisateurs par statut KYC
-     */
-    List<User> findByKycStatus(KYCStatus kycStatus);
-
-    /**
-     * Trouve les utilisateurs par statut AML
-     */
-    List<User> findByAmlStatus(AMLStatus amlStatus);
-
-    /**
-     * Trouve les utilisateurs avec un score de risque supérieur ou égal à la valeur donnée
-     */
-    List<User> findByRiskScoreGreaterThanEqual(Integer riskScore);
-
-    /**
-     * Trouve les utilisateurs par nationalité
-     */
-    List<User> findByNationality(String nationality);
-
-    /**
-     * Trouve les utilisateurs par pays
-     */
-    List<User> findByCountry(String country);
-
-    /**
-     * Trouve les utilisateurs créés après une date donnée
-     */
-    List<User> findByCreatedAtAfter(LocalDateTime date);
-
-    /**
-     * Trouve les utilisateurs créés entre deux dates
-     */
-    List<User> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
-
-    /**
-     * Trouve les utilisateurs qui se sont connectés après une date donnée
-     */
-    List<User> findByLastLoginDateAfter(LocalDateTime date);
-
-    /**
-     * Trouve les utilisateurs avec MFA activé
-     */
-    List<User> findByMfaEnabledTrue();
-
-    /**
-     * Trouve les utilisateurs avec un nombre de tentatives de connexion échouées supérieur ou égal à la valeur donnée
-     */
-    List<User> findByFailedLoginAttemptsGreaterThanEqual(Integer attempts);
-
-    /**
-     * Trouve les utilisateurs par type de document d'identité
-     */
-    List<User> findByIdType(com.banking.transfers.model.IdType idType);
+    Optional<User> findByIdNumberAndIdType(String idNumber, String idType);
 
     /**
      * Vérifie si un nom d'utilisateur existe
@@ -123,51 +67,134 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByIdNumber(String idNumber);
 
     /**
-     * Trouve les utilisateurs par nom ou prénom (recherche insensible à la casse)
+     * Trouve tous les utilisateurs actifs
+     */
+    List<User> findByIsActiveTrue();
+
+    /**
+     * Trouve tous les utilisateurs inactifs
+     */
+    List<User> findByIsActiveFalse();
+
+    /**
+     * Trouve tous les utilisateurs verrouillés
+     */
+    List<User> findByIsLockedTrue();
+
+    /**
+     * Trouve tous les utilisateurs avec un statut KYC spécifique
+     */
+    List<User> findByKycStatus(KYCStatus kycStatus);
+
+    /**
+     * Trouve tous les utilisateurs avec un statut AML spécifique
+     */
+    List<User> findByAmlStatus(AMLStatus amlStatus);
+
+    /**
+     * Trouve tous les utilisateurs avec un score de risque supérieur à une valeur donnée
+     */
+    List<User> findByRiskScoreGreaterThan(Integer riskScore);
+
+    /**
+     * Trouve tous les utilisateurs avec MFA activé
+     */
+    List<User> findByMfaEnabledTrue();
+
+    /**
+     * Trouve tous les utilisateurs avec MFA désactivé
+     */
+    List<User> findByMfaEnabledFalse();
+
+    /**
+     * Trouve tous les utilisateurs créés après une date donnée
+     */
+    List<User> findByCreatedAtAfter(LocalDateTime date);
+
+    /**
+     * Trouve tous les utilisateurs créés avant une date donnée
+     */
+    List<User> findByCreatedAtBefore(LocalDateTime date);
+
+    /**
+     * Trouve tous les utilisateurs qui se sont connectés après une date donnée
+     */
+    List<User> findByLastLoginDateAfter(LocalDateTime date);
+
+    /**
+     * Trouve tous les utilisateurs qui ne se sont jamais connectés
+     */
+    List<User> findByLastLoginDateIsNull();
+
+    /**
+     * Trouve tous les utilisateurs par nationalité
+     */
+    List<User> findByNationality(String nationality);
+
+    /**
+     * Trouve tous les utilisateurs par type de document d'identité
+     */
+    List<User> findByIdType(String idType);
+
+    /**
+     * Recherche d'utilisateurs par nom (prénom ou nom de famille)
      */
     @Query("SELECT u FROM User u WHERE LOWER(u.firstName) LIKE LOWER(CONCAT('%', :name, '%')) OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :name, '%'))")
-    List<User> findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase(@Param("name") String name);
+    List<User> findByNameContainingIgnoreCase(@Param("name") String name);
 
     /**
-     * Trouve les utilisateurs par téléphone
+     * Recherche d'utilisateurs par nom avec pagination
      */
-    List<User> findByPhone(String phone);
+    @Query("SELECT u FROM User u WHERE LOWER(u.firstName) LIKE LOWER(CONCAT('%', :name, '%')) OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :name, '%'))")
+    Page<User> findByNameContainingIgnoreCase(@Param("name") String name, Pageable pageable);
 
     /**
-     * Trouve les utilisateurs avec un score de risque élevé (>= 70)
+     * Trouve tous les utilisateurs avec un rôle spécifique
      */
-    @Query("SELECT u FROM User u WHERE u.riskScore >= 70")
-    List<User> findHighRiskUsers();
-
-    /**
-     * Trouve les utilisateurs nécessitant une vérification KYC
-     */
-    @Query("SELECT u FROM User u WHERE u.kycStatus IN ('NOT_VERIFIED', 'PENDING')")
-    List<User> findUsersRequiringKYCVerification();
-
-    /**
-     * Trouve les utilisateurs nécessitant une vérification AML
-     */
-    @Query("SELECT u FROM User u WHERE u.amlStatus IN ('NOT_CHECKED', 'PENDING')")
-    List<User> findUsersRequiringAMLVerification();
-
-    /**
-     * Trouve les utilisateurs inactifs depuis une date donnée
-     */
-    @Query("SELECT u FROM User u WHERE u.lastLoginDate < :date OR u.lastLoginDate IS NULL")
-    List<User> findInactiveUsersSince(@Param("date") LocalDateTime date);
-
-    /**
-     * Trouve les utilisateurs par rôle (recherche dans le JSON des rôles)
-     */
-    @Query("SELECT u FROM User u WHERE u.roles LIKE %:role%")
+    @Query("SELECT u FROM User u JOIN u.roles r WHERE r = :role")
     List<User> findByRole(@Param("role") String role);
 
     /**
-     * Trouve les utilisateurs par permission (recherche dans le JSON des permissions)
+     * Trouve tous les utilisateurs avec une permission spécifique
      */
-    @Query("SELECT u FROM User u WHERE u.permissions LIKE %:permission%")
+    @Query("SELECT u FROM User u JOIN u.permissions p WHERE p = :permission")
     List<User> findByPermission(@Param("permission") String permission);
+
+    /**
+     * Trouve tous les utilisateurs avec plusieurs rôles
+     */
+    @Query("SELECT u FROM User u JOIN u.roles r WHERE r IN :roles")
+    List<User> findByRolesIn(@Param("roles") List<String> roles);
+
+    /**
+     * Trouve tous les utilisateurs avec plusieurs permissions
+     */
+    @Query("SELECT u FROM User u JOIN u.permissions p WHERE p IN :permissions")
+    List<User> findByPermissionsIn(@Param("permissions") List<String> permissions);
+
+    /**
+     * Trouve tous les utilisateurs non conformes (KYC non vérifié ou AML échoué)
+     */
+    @Query("SELECT u FROM User u WHERE u.kycStatus != 'VERIFIED' OR u.amlStatus = 'FAILED' OR u.amlStatus = 'BLOCKED'")
+    List<User> findNonCompliantUsers();
+
+    /**
+     * Trouve tous les utilisateurs avec des tentatives de connexion échouées
+     */
+    @Query("SELECT u FROM User u WHERE u.failedLoginAttempts > 0")
+    List<User> findUsersWithFailedLoginAttempts();
+
+    /**
+     * Trouve tous les utilisateurs avec des mots de passe expirés (plus de 90 jours)
+     */
+    @Query("SELECT u FROM User u WHERE u.passwordChangedDate < :expiryDate")
+    List<User> findUsersWithExpiredPasswords(@Param("expiryDate") LocalDateTime expiryDate);
+
+    /**
+     * Trouve tous les utilisateurs inactifs depuis une date donnée
+     */
+    @Query("SELECT u FROM User u WHERE u.lastLoginDate < :inactiveDate OR u.lastLoginDate IS NULL")
+    List<User> findInactiveUsers(@Param("inactiveDate") LocalDateTime inactiveDate);
 
     /**
      * Compte le nombre d'utilisateurs par statut KYC
@@ -188,44 +215,46 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<Object[]> countUsersByNationality();
 
     /**
-     * Trouve les utilisateurs avec pagination et filtres
+     * Trouve les utilisateurs avec un score de risque élevé (supérieur à 7)
+     */
+    @Query("SELECT u FROM User u WHERE u.riskScore >= 7 ORDER BY u.riskScore DESC")
+    List<User> findHighRiskUsers();
+
+    /**
+     * Trouve les utilisateurs créés dans une période donnée
+     */
+    @Query("SELECT u FROM User u WHERE u.createdAt BETWEEN :startDate AND :endDate")
+    List<User> findUsersCreatedBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * Trouve les utilisateurs qui se sont connectés dans une période donnée
+     */
+    @Query("SELECT u FROM User u WHERE u.lastLoginDate BETWEEN :startDate AND :endDate")
+    List<User> findUsersLoggedInBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * Recherche avancée d'utilisateurs avec plusieurs critères
      */
     @Query("SELECT u FROM User u WHERE " +
-           "(:username IS NULL OR u.username LIKE %:username%) AND " +
-           "(:email IS NULL OR u.email LIKE %:email%) AND " +
-           "(:firstName IS NULL OR u.firstName LIKE %:firstName%) AND " +
-           "(:lastName IS NULL OR u.lastName LIKE %:lastName%) AND " +
+           "(:username IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%'))) AND " +
+           "(:email IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :email, '%'))) AND " +
+           "(:firstName IS NULL OR LOWER(u.firstName) LIKE LOWER(CONCAT('%', :firstName, '%'))) AND " +
+           "(:lastName IS NULL OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :lastName, '%'))) AND " +
+           "(:nationality IS NULL OR u.nationality = :nationality) AND " +
            "(:kycStatus IS NULL OR u.kycStatus = :kycStatus) AND " +
            "(:amlStatus IS NULL OR u.amlStatus = :amlStatus) AND " +
            "(:isActive IS NULL OR u.isActive = :isActive) AND " +
            "(:isLocked IS NULL OR u.isLocked = :isLocked)")
-    Page<User> findUsersWithFilters(
+    Page<User> findUsersByCriteria(
             @Param("username") String username,
             @Param("email") String email,
             @Param("firstName") String firstName,
             @Param("lastName") String lastName,
+            @Param("nationality") String nationality,
             @Param("kycStatus") KYCStatus kycStatus,
             @Param("amlStatus") AMLStatus amlStatus,
             @Param("isActive") Boolean isActive,
             @Param("isLocked") Boolean isLocked,
             Pageable pageable
     );
-
-    /**
-     * Trouve les utilisateurs créés récemment (derniers 30 jours)
-     */
-    @Query("SELECT u FROM User u WHERE u.createdAt >= :thirtyDaysAgo ORDER BY u.createdAt DESC")
-    List<User> findRecentlyCreatedUsers(@Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo);
-
-    /**
-     * Trouve les utilisateurs qui se sont connectés récemment (derniers 7 jours)
-     */
-    @Query("SELECT u FROM User u WHERE u.lastLoginDate >= :sevenDaysAgo ORDER BY u.lastLoginDate DESC")
-    List<User> findRecentlyActiveUsers(@Param("sevenDaysAgo") LocalDateTime sevenDaysAgo);
-
-    /**
-     * Supprime les utilisateurs inactifs depuis plus d'un an
-     */
-    @Query("DELETE FROM User u WHERE u.lastLoginDate < :oneYearAgo AND u.isActive = false")
-    int deleteInactiveUsers(@Param("oneYearAgo") LocalDateTime oneYearAgo);
 }

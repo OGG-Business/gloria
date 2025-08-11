@@ -3,38 +3,42 @@ package com.banking.transfers.service;
 import com.banking.transfers.model.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Service pour la gestion des JWT (JSON Web Tokens)
+ * Service pour la gestion des tokens JWT
  */
 @Service
 public class JwtService {
 
-    @Value("${jwt.secret:default-secret-key-for-development-only}")
+    private static final Logger logger = LoggerFactory.getLogger(JwtService.class);
+
+    @Value("${jwt.secret:defaultSecretKeyForDevelopmentOnly}")
     private String jwtSecret;
 
     @Value("${jwt.access-token.expiration:3600}")
-    private Long accessTokenExpiration; // en secondes
+    private Long accessTokenExpiration; // 1 heure par défaut
 
     @Value("${jwt.refresh-token.expiration:86400}")
-    private Long refreshTokenExpiration; // en secondes
+    private Long refreshTokenExpiration; // 24 heures par défaut
 
     @Value("${jwt.issuer:banking-transfer-platform}")
-    private String issuer;
+    private String jwtIssuer;
 
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
-    }
+    // Cache pour les tokens invalides (blacklist)
+    private final Set<String> blacklistedTokens = ConcurrentHashMap.newKeySet();
 
     /**
      * Génère un token d'accès pour un utilisateur
@@ -51,52 +55,95 @@ public class JwtService {
     }
 
     /**
-     * Génère un token avec les claims spécifiés
+     * Génère un token JWT
      */
-    private String generateToken(User user, Long expirationSeconds, String tokenType) {
-        Date now = new Date();
-        Date expiration = new Date(now.getTime() + (expirationSeconds * 1000));
-
+    private String generateToken(User user, Long expiration, String tokenType) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
-        claims.put("username", user.getUsername());
         claims.put("email", user.getEmail());
-        claims.put("tokenType", tokenType);
+        claims.put("firstName", user.getFirstName());
+        claims.put("lastName", user.getLastName());
+        claims.put("roles", user.getRoles());
+        claims.put("permissions", user.getPermissions());
         claims.put("kycStatus", user.getKycStatus().name());
         claims.put("amlStatus", user.getAmlStatus().name());
         claims.put("riskScore", user.getRiskScore());
         claims.put("mfaEnabled", user.getMfaEnabled());
+        claims.put("tokenType", tokenType);
 
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(user.getUsername())
-                .setIssuer(issuer)
-                .setIssuedAt(now)
-                .setExpiration(expiration)
-                .setId(UUID.randomUUID().toString())
+                .setIssuer(jwtIssuer)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expiration * 1000))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
     /**
-     * Valide un token JWT
+     * Extrait le nom d'utilisateur depuis un token
      */
-    public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
-                    .build()
-                    .parseClaimsJws(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
     }
 
     /**
-     * Extrait les claims d'un token JWT
+     * Extrait l'ID utilisateur depuis un token
      */
-    public Claims extractClaims(String token) {
+    public String extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId", String.class));
+    }
+
+    /**
+     * Extrait l'email depuis un token
+     */
+    public String extractEmail(String token) {
+        return extractClaim(token, claims -> claims.get("email", String.class));
+    }
+
+    /**
+     * Extrait les rôles depuis un token
+     */
+    @SuppressWarnings("unchecked")
+    public Set<String> extractRoles(String token) {
+        return extractClaim(token, claims -> (Set<String>) claims.get("roles"));
+    }
+
+    /**
+     * Extrait les permissions depuis un token
+     */
+    @SuppressWarnings("unchecked")
+    public Set<String> extractPermissions(String token) {
+        return extractClaim(token, claims -> (Set<String>) claims.get("permissions"));
+    }
+
+    /**
+     * Extrait le type de token depuis un token
+     */
+    public String extractTokenType(String token) {
+        return extractClaim(token, claims -> claims.get("tokenType", String.class));
+    }
+
+    /**
+     * Extrait la date d'expiration depuis un token
+     */
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    /**
+     * Extrait une claim spécifique depuis un token
+     */
+    public <T> T extractClaim(String token, java.util.function.Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    /**
+     * Extrait toutes les claims depuis un token
+     */
+    private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
@@ -105,145 +152,94 @@ public class JwtService {
     }
 
     /**
-     * Extrait l'ID utilisateur d'un token
-     */
-    public UUID extractUserId(String token) {
-        Claims claims = extractClaims(token);
-        return UUID.fromString(claims.get("userId", String.class));
-    }
-
-    /**
-     * Extrait le nom d'utilisateur d'un token
-     */
-    public String extractUsername(String token) {
-        Claims claims = extractClaims(token);
-        return claims.getSubject();
-    }
-
-    /**
-     * Extrait l'email d'un token
-     */
-    public String extractEmail(String token) {
-        Claims claims = extractClaims(token);
-        return claims.get("email", String.class);
-    }
-
-    /**
-     * Extrait le type de token
-     */
-    public String extractTokenType(String token) {
-        Claims claims = extractClaims(token);
-        return claims.get("tokenType", String.class);
-    }
-
-    /**
-     * Extrait le statut KYC d'un token
-     */
-    public String extractKycStatus(String token) {
-        Claims claims = extractClaims(token);
-        return claims.get("kycStatus", String.class);
-    }
-
-    /**
-     * Extrait le statut AML d'un token
-     */
-    public String extractAmlStatus(String token) {
-        Claims claims = extractClaims(token);
-        return claims.get("amlStatus", String.class);
-    }
-
-    /**
-     * Extrait le score de risque d'un token
-     */
-    public Integer extractRiskScore(String token) {
-        Claims claims = extractClaims(token);
-        return claims.get("riskScore", Integer.class);
-    }
-
-    /**
-     * Extrait le statut MFA d'un token
-     */
-    public Boolean extractMfaEnabled(String token) {
-        Claims claims = extractClaims(token);
-        return claims.get("mfaEnabled", Boolean.class);
-    }
-
-    /**
      * Vérifie si un token est expiré
      */
     public boolean isTokenExpired(String token) {
         try {
-            Claims claims = extractClaims(token);
-            return claims.getExpiration().before(new Date());
-        } catch (JwtException | IllegalArgumentException e) {
+            Date expiration = extractExpiration(token);
+            return expiration.before(new Date());
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la vérification d'expiration du token: {}", e.getMessage());
             return true;
         }
     }
 
     /**
-     * Obtient la date d'expiration d'un token
+     * Vérifie si un token est valide pour un utilisateur
      */
-    public LocalDateTime getTokenExpiration(String token) {
+    public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
-            Claims claims = extractClaims(token);
-            return claims.getExpiration().toInstant()
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDateTime();
-        } catch (JwtException | IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Obtient la date d'émission d'un token
-     */
-    public LocalDateTime getTokenIssuedAt(String token) {
-        try {
-            Claims claims = extractClaims(token);
-            return claims.getIssuedAt().toInstant()
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDateTime();
-        } catch (JwtException | IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Obtient le temps restant avant expiration d'un token (en secondes)
-     */
-    public Long getTokenTimeToExpiry(String token) {
-        try {
-            Claims claims = extractClaims(token);
-            Date expiration = claims.getExpiration();
-            Date now = new Date();
-            return Math.max(0, (expiration.getTime() - now.getTime()) / 1000);
-        } catch (JwtException | IllegalArgumentException e) {
-            return 0L;
-        }
-    }
-
-    /**
-     * Vérifie si un token est un token d'accès
-     */
-    public boolean isAccessToken(String token) {
-        try {
-            String tokenType = extractTokenType(token);
-            return "access".equals(tokenType);
-        } catch (JwtException | IllegalArgumentException e) {
+            final String username = extractUsername(token);
+            return (username.equals(userDetails.getUsername()) && !isTokenExpired(token) && !isTokenBlacklisted(token));
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la validation du token: {}", e.getMessage());
             return false;
         }
     }
 
     /**
-     * Vérifie si un token est un token de rafraîchissement
+     * Vérifie si un token est valide pour un utilisateur
      */
-    public boolean isRefreshToken(String token) {
+    public boolean isTokenValid(String token, User user) {
         try {
-            String tokenType = extractTokenType(token);
-            return "refresh".equals(tokenType);
-        } catch (JwtException | IllegalArgumentException e) {
+            final String username = extractUsername(token);
+            return (username.equals(user.getUsername()) && !isTokenExpired(token) && !isTokenBlacklisted(token));
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la validation du token: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Vérifie si un token est valide (sans vérifier l'utilisateur)
+     */
+    public boolean isTokenValid(String token) {
+        try {
+            return !isTokenExpired(token) && !isTokenBlacklisted(token);
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la validation du token: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Vérifie si un token est dans la liste noire
+     */
+    public boolean isTokenBlacklisted(String token) {
+        return blacklistedTokens.contains(token);
+    }
+
+    /**
+     * Invalide un token (l'ajoute à la liste noire)
+     */
+    public void invalidateToken(String token) {
+        if (token != null && !token.trim().isEmpty()) {
+            blacklistedTokens.add(token);
+            logger.info("Token ajouté à la liste noire");
+        }
+    }
+
+    /**
+     * Nettoie les tokens expirés de la liste noire
+     */
+    public void cleanupExpiredTokens() {
+        blacklistedTokens.removeIf(token -> {
+            try {
+                return isTokenExpired(token);
+            } catch (Exception e) {
+                logger.warn("Erreur lors du nettoyage du token: {}", e.getMessage());
+                return true; // Supprimer le token en cas d'erreur
+            }
+        });
+        logger.info("Nettoyage des tokens expirés terminé. {} tokens restants dans la liste noire", blacklistedTokens.size());
+    }
+
+    /**
+     * Obtient la clé de signature pour les tokens
+     */
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     /**
@@ -261,92 +257,159 @@ public class JwtService {
     }
 
     /**
-     * Génère un token temporaire pour des opérations spécifiques
+     * Vérifie si un token est un token d'accès
      */
-    public String generateTemporaryToken(User user, Long expirationSeconds, String purpose) {
-        Date now = new Date();
-        Date expiration = new Date(now.getTime() + (expirationSeconds * 1000));
-
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", user.getId().toString());
-        claims.put("username", user.getUsername());
-        claims.put("tokenType", "temporary");
-        claims.put("purpose", purpose);
-
-        return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(user.getUsername())
-                .setIssuer(issuer)
-                .setIssuedAt(now)
-                .setExpiration(expiration)
-                .setId(UUID.randomUUID().toString())
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
-                .compact();
-    }
-
-    /**
-     * Extrait le but d'un token temporaire
-     */
-    public String extractTokenPurpose(String token) {
-        try {
-            Claims claims = extractClaims(token);
-            return claims.get("purpose", String.class);
-        } catch (JwtException | IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Vérifie si un token est un token temporaire
-     */
-    public boolean isTemporaryToken(String token) {
+    public boolean isAccessToken(String token) {
         try {
             String tokenType = extractTokenType(token);
-            return "temporary".equals(tokenType);
-        } catch (JwtException | IllegalArgumentException e) {
+            return "access".equals(tokenType);
+        } catch (Exception e) {
             return false;
         }
     }
 
     /**
-     * Génère un token de réinitialisation de mot de passe
+     * Vérifie si un token est un token de rafraîchissement
      */
-    public String generatePasswordResetToken(User user) {
-        return generateTemporaryToken(user, 3600L, "password_reset"); // 1 heure
+    public boolean isRefreshToken(String token) {
+        try {
+            String tokenType = extractTokenType(token);
+            return "refresh".equals(tokenType);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
-     * Génère un token de vérification d'email
+     * Extrait les informations de sécurité depuis un token
      */
-    public String generateEmailVerificationToken(User user) {
-        return generateTemporaryToken(user, 86400L, "email_verification"); // 24 heures
+    public SecurityInfo extractSecurityInfo(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            return SecurityInfo.builder()
+                    .userId(claims.get("userId", String.class))
+                    .username(claims.getSubject())
+                    .email(claims.get("email", String.class))
+                    .roles((Set<String>) claims.get("roles"))
+                    .permissions((Set<String>) claims.get("permissions"))
+                    .kycStatus(claims.get("kycStatus", String.class))
+                    .amlStatus(claims.get("amlStatus", String.class))
+                    .riskScore(claims.get("riskScore", Integer.class))
+                    .mfaEnabled(claims.get("mfaEnabled", Boolean.class))
+                    .tokenType(claims.get("tokenType", String.class))
+                    .issuedAt(claims.getIssuedAt())
+                    .expiresAt(claims.getExpiration())
+                    .build();
+        } catch (Exception e) {
+            logger.warn("Erreur lors de l'extraction des informations de sécurité: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
-     * Génère un token de vérification MFA
+     * Classe pour encapsuler les informations de sécurité extraites d'un token
      */
-    public String generateMfaVerificationToken(User user) {
-        return generateTemporaryToken(user, 300L, "mfa_verification"); // 5 minutes
-    }
+    public static class SecurityInfo {
+        private String userId;
+        private String username;
+        private String email;
+        private Set<String> roles;
+        private Set<String> permissions;
+        private String kycStatus;
+        private String amlStatus;
+        private Integer riskScore;
+        private Boolean mfaEnabled;
+        private String tokenType;
+        private Date issuedAt;
+        private Date expiresAt;
 
-    /**
-     * Vérifie si un token est un token de réinitialisation de mot de passe
-     */
-    public boolean isPasswordResetToken(String token) {
-        return isTemporaryToken(token) && "password_reset".equals(extractTokenPurpose(token));
-    }
+        private SecurityInfo() {}
 
-    /**
-     * Vérifie si un token est un token de vérification d'email
-     */
-    public boolean isEmailVerificationToken(String token) {
-        return isTemporaryToken(token) && "email_verification".equals(extractTokenPurpose(token));
-    }
+        public static Builder builder() {
+            return new Builder();
+        }
 
-    /**
-     * Vérifie si un token est un token de vérification MFA
-     */
-    public boolean isMfaVerificationToken(String token) {
-        return isTemporaryToken(token) && "mfa_verification".equals(extractTokenPurpose(token));
+        // Getters
+        public String getUserId() { return userId; }
+        public String getUsername() { return username; }
+        public String getEmail() { return email; }
+        public Set<String> getRoles() { return roles; }
+        public Set<String> getPermissions() { return permissions; }
+        public String getKycStatus() { return kycStatus; }
+        public String getAmlStatus() { return amlStatus; }
+        public Integer getRiskScore() { return riskScore; }
+        public Boolean getMfaEnabled() { return mfaEnabled; }
+        public String getTokenType() { return tokenType; }
+        public Date getIssuedAt() { return issuedAt; }
+        public Date getExpiresAt() { return expiresAt; }
+
+        // Builder
+        public static class Builder {
+            private SecurityInfo info = new SecurityInfo();
+
+            public Builder userId(String userId) {
+                info.userId = userId;
+                return this;
+            }
+
+            public Builder username(String username) {
+                info.username = username;
+                return this;
+            }
+
+            public Builder email(String email) {
+                info.email = email;
+                return this;
+            }
+
+            public Builder roles(Set<String> roles) {
+                info.roles = roles;
+                return this;
+            }
+
+            public Builder permissions(Set<String> permissions) {
+                info.permissions = permissions;
+                return this;
+            }
+
+            public Builder kycStatus(String kycStatus) {
+                info.kycStatus = kycStatus;
+                return this;
+            }
+
+            public Builder amlStatus(String amlStatus) {
+                info.amlStatus = amlStatus;
+                return this;
+            }
+
+            public Builder riskScore(Integer riskScore) {
+                info.riskScore = riskScore;
+                return this;
+            }
+
+            public Builder mfaEnabled(Boolean mfaEnabled) {
+                info.mfaEnabled = mfaEnabled;
+                return this;
+            }
+
+            public Builder tokenType(String tokenType) {
+                info.tokenType = tokenType;
+                return this;
+            }
+
+            public Builder issuedAt(Date issuedAt) {
+                info.issuedAt = issuedAt;
+                return this;
+            }
+
+            public Builder expiresAt(Date expiresAt) {
+                info.expiresAt = expiresAt;
+                return this;
+            }
+
+            public SecurityInfo build() {
+                return info;
+            }
+        }
     }
 }

@@ -41,6 +41,15 @@ public enum IdType {
         throw new IllegalArgumentException("Type d'identité inconnu: " + code);
     }
 
+    public static boolean isValid(String code) {
+        for (IdType idType : values()) {
+            if (idType.code.equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean isGovernmentIssued() {
         return this == PASSPORT || this == NATIONAL_ID || this == DRIVERS_LICENSE || 
                this == RESIDENCE_PERMIT || this == MILITARY_ID || this == WORK_PERMIT || 
@@ -49,6 +58,10 @@ public enum IdType {
 
     public boolean isPrimaryId() {
         return this == PASSPORT || this == NATIONAL_ID;
+    }
+
+    public boolean isSecondaryId() {
+        return this == DRIVERS_LICENSE || this == RESIDENCE_PERMIT || this == MILITARY_ID;
     }
 
     @Override

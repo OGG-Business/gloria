@@ -8,6 +8,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,7 +22,7 @@ import java.util.UUID;
     @Index(name = "idx_user_id_number", columnList = "id_number"),
     @Index(name = "idx_user_kyc_status", columnList = "kyc_status"),
     @Index(name = "idx_user_aml_status", columnList = "aml_status"),
-    @Index(name = "idx_user_created_at", columnList = "created_at")
+    @Index(name = "idx_user_is_active", columnList = "is_active")
 })
 @EntityListeners(AuditingEntityListener.class)
 public class User {
@@ -30,12 +32,12 @@ public class User {
 
     @Column(name = "username", unique = true, nullable = false, length = 50)
     @NotBlank(message = "Le nom d'utilisateur est obligatoire")
-    @Pattern(regexp = "^[a-zA-Z0-9_]{3,50}$", message = "Le nom d'utilisateur doit contenir 3 à 50 caractères alphanumériques et underscores")
+    @Pattern(regexp = "^[a-zA-Z0-9_]{3,50}$", message = "Le nom d'utilisateur doit contenir entre 3 et 50 caractères alphanumériques et underscores")
     private String username;
 
     @Column(name = "email", unique = true, nullable = false, length = 100)
     @NotBlank(message = "L'email est obligatoire")
-    @Email(message = "L'email doit être valide")
+    @Email(message = "Format d'email invalide")
     private String email;
 
     @Column(name = "password_hash", nullable = false)
@@ -53,7 +55,7 @@ public class User {
     private String lastName;
 
     @Column(name = "phone", length = 20)
-    @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Le numéro de téléphone doit être valide")
+    @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Format de téléphone invalide")
     private String phone;
 
     @Column(name = "date_of_birth")
@@ -61,7 +63,7 @@ public class User {
     private LocalDate dateOfBirth;
 
     @Column(name = "nationality", length = 2)
-    @Pattern(regexp = "^[A-Z]{2}$", message = "La nationalité doit être un code pays ISO 3166-1 alpha-2")
+    @Pattern(regexp = "^[A-Z]{2}$", message = "Le code de nationalité doit être un code ISO 3166-1 alpha-2")
     private String nationality;
 
     @Column(name = "id_number", length = 50)
@@ -70,19 +72,6 @@ public class User {
     @Column(name = "id_type", length = 20)
     @Enumerated(EnumType.STRING)
     private IdType idType;
-
-    @Column(name = "address", length = 500)
-    private String address;
-
-    @Column(name = "city", length = 100)
-    private String city;
-
-    @Column(name = "country", length = 2)
-    @Pattern(regexp = "^[A-Z]{2}$", message = "Le pays doit être un code pays ISO 3166-1 alpha-2")
-    private String country;
-
-    @Column(name = "postal_code", length = 20)
-    private String postalCode;
 
     @Column(name = "kyc_status", nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
@@ -113,17 +102,21 @@ public class User {
     @Column(name = "mfa_enabled", nullable = false)
     private Boolean mfaEnabled = false;
 
-    @Column(name = "mfa_secret", length = 100)
+    @Column(name = "mfa_secret", length = 32)
     private String mfaSecret;
 
-    @Column(name = "roles", length = 500)
-    private String roles; // JSON array of roles
+    @Column(name = "mfa_backup_codes", columnDefinition = "TEXT")
+    private String mfaBackupCodes;
 
-    @Column(name = "permissions", length = 1000)
-    private String permissions; // JSON array of permissions
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "role", length = 50)
+    private Set<String> roles = new HashSet<>();
 
-    @Column(name = "preferences", length = 2000)
-    private String preferences; // JSON object of user preferences
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_permissions", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "permission", length = 100)
+    private Set<String> permissions = new HashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreatedDate
@@ -239,38 +232,6 @@ public class User {
         this.idType = idType;
     }
 
-    public String getAddress() {
-        return address;
-    }
-
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public String getCity() {
-        return city;
-    }
-
-    public void setCity(String city) {
-        this.city = city;
-    }
-
-    public String getCountry() {
-        return country;
-    }
-
-    public void setCountry(String country) {
-        this.country = country;
-    }
-
-    public String getPostalCode() {
-        return postalCode;
-    }
-
-    public void setPostalCode(String postalCode) {
-        this.postalCode = postalCode;
-    }
-
     public KYCStatus getKycStatus() {
         return kycStatus;
     }
@@ -351,28 +312,28 @@ public class User {
         this.mfaSecret = mfaSecret;
     }
 
-    public String getRoles() {
+    public String getMfaBackupCodes() {
+        return mfaBackupCodes;
+    }
+
+    public void setMfaBackupCodes(String mfaBackupCodes) {
+        this.mfaBackupCodes = mfaBackupCodes;
+    }
+
+    public Set<String> getRoles() {
         return roles;
     }
 
-    public void setRoles(String roles) {
+    public void setRoles(Set<String> roles) {
         this.roles = roles;
     }
 
-    public String getPermissions() {
+    public Set<String> getPermissions() {
         return permissions;
     }
 
-    public void setPermissions(String permissions) {
+    public void setPermissions(Set<String> permissions) {
         this.permissions = permissions;
-    }
-
-    public String getPreferences() {
-        return preferences;
-    }
-
-    public void setPreferences(String preferences) {
-        this.preferences = preferences;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -412,12 +373,44 @@ public class User {
         return firstName + " " + lastName;
     }
 
-    public boolean isAccountLocked() {
-        return isLocked || !isActive;
+    public boolean isAccountNonExpired() {
+        return isActive;
     }
 
-    public boolean canLogin() {
-        return isActive && !isLocked && kycStatus.isValid() && amlStatus.isValid();
+    public boolean isAccountNonLocked() {
+        return !isLocked;
+    }
+
+    public boolean isCredentialsNonExpired() {
+        if (passwordChangedDate == null) {
+            return true;
+        }
+        // Mot de passe valide pendant 90 jours
+        return passwordChangedDate.plusDays(90).isAfter(LocalDateTime.now());
+    }
+
+    public boolean isEnabled() {
+        return isActive && !isLocked;
+    }
+
+    public boolean hasRole(String role) {
+        return roles.contains(role);
+    }
+
+    public boolean hasPermission(String permission) {
+        return permissions.contains(permission);
+    }
+
+    public boolean isKycVerified() {
+        return kycStatus == KYCStatus.VERIFIED;
+    }
+
+    public boolean isAmlPassed() {
+        return amlStatus == AMLStatus.PASSED;
+    }
+
+    public boolean isCompliant() {
+        return isKycVerified() && isAmlPassed();
     }
 
     public void incrementFailedLoginAttempts() {
@@ -432,12 +425,33 @@ public class User {
         this.isLocked = false;
     }
 
-    public boolean hasRole(String role) {
-        return roles != null && roles.contains(role);
+    public void addRole(String role) {
+        this.roles.add(role);
     }
 
-    public boolean hasPermission(String permission) {
-        return permissions != null && permissions.contains(permission);
+    public void removeRole(String role) {
+        this.roles.remove(role);
+    }
+
+    public void addPermission(String permission) {
+        this.permissions.add(permission);
+    }
+
+    public void removePermission(String permission) {
+        this.permissions.remove(permission);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return id != null && id.equals(user.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return id != null ? id.hashCode() : 0;
     }
 
     @Override
@@ -448,10 +462,10 @@ public class User {
                 ", email='" + email + '\'' +
                 ", firstName='" + firstName + '\'' +
                 ", lastName='" + lastName + '\'' +
-                ", kycStatus=" + kycStatus +
-                ", amlStatus=" + amlStatus +
                 ", isActive=" + isActive +
                 ", isLocked=" + isLocked +
+                ", kycStatus=" + kycStatus +
+                ", amlStatus=" + amlStatus +
                 '}';
     }
 }

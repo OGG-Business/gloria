@@ -4,49 +4,49 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * DTO pour la requête de connexion
+ * DTO pour les demandes de connexion
  */
 public class LoginRequest {
 
-    @NotBlank(message = "L'identifiant (nom d'utilisateur ou email) est obligatoire")
+    @NotBlank(message = "Le nom d'utilisateur ou l'email est obligatoire")
     @Size(min = 3, max = 100, message = "L'identifiant doit contenir entre 3 et 100 caractères")
-    private String identifier; // username ou email
+    private String usernameOrEmail;
 
     @NotBlank(message = "Le mot de passe est obligatoire")
     @Size(min = 8, max = 128, message = "Le mot de passe doit contenir entre 8 et 128 caractères")
     private String password;
 
-    private String mfaCode; // Code MFA si activé
+    private String mfaCode;
 
-    private String deviceId; // Identifiant de l'appareil pour la sécurité
+    private String deviceId;
 
-    private String userAgent; // User-Agent du navigateur
+    private String userAgent;
 
-    private String ipAddress; // Adresse IP du client
+    private String ipAddress;
 
-    private Boolean rememberMe = false; // Se souvenir de l'utilisateur
+    private Boolean rememberMe = false;
 
     // Constructeurs
     public LoginRequest() {}
 
-    public LoginRequest(String identifier, String password) {
-        this.identifier = identifier;
+    public LoginRequest(String usernameOrEmail, String password) {
+        this.usernameOrEmail = usernameOrEmail;
         this.password = password;
     }
 
-    public LoginRequest(String identifier, String password, String mfaCode) {
-        this.identifier = identifier;
+    public LoginRequest(String usernameOrEmail, String password, String mfaCode) {
+        this.usernameOrEmail = usernameOrEmail;
         this.password = password;
         this.mfaCode = mfaCode;
     }
 
     // Getters et Setters
-    public String getIdentifier() {
-        return identifier;
+    public String getUsernameOrEmail() {
+        return usernameOrEmail;
     }
 
-    public void setIdentifier(String identifier) {
-        this.identifier = identifier;
+    public void setUsernameOrEmail(String usernameOrEmail) {
+        this.usernameOrEmail = usernameOrEmail;
     }
 
     public String getPassword() {
@@ -106,10 +106,14 @@ public class LoginRequest {
         return rememberMe != null && rememberMe;
     }
 
+    public boolean hasDeviceInfo() {
+        return deviceId != null && !deviceId.trim().isEmpty();
+    }
+
     @Override
     public String toString() {
         return "LoginRequest{" +
-                "identifier='" + identifier + '\'' +
+                "usernameOrEmail='" + usernameOrEmail + '\'' +
                 ", mfaCode='" + (mfaCode != null ? "***" : "null") + '\'' +
                 ", deviceId='" + deviceId + '\'' +
                 ", userAgent='" + userAgent + '\'' +

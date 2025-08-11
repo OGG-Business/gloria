@@ -4,56 +4,36 @@ import com.banking.transfers.model.AMLStatus;
 import com.banking.transfers.model.KYCStatus;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
+import java.util.Set;
 
 /**
- * DTO pour la réponse de connexion
+ * DTO pour les réponses de connexion
  */
 public class LoginResponse {
 
     private String accessToken;
     private String refreshToken;
     private String tokenType = "Bearer";
-    private Long expiresIn; // en secondes
+    private Long expiresIn;
     private LocalDateTime expiresAt;
-    private String scope;
-
-    // Informations utilisateur
-    private UUID userId;
+    private String userId;
     private String username;
     private String email;
     private String firstName;
     private String lastName;
     private String fullName;
-    private String phone;
-    private String nationality;
-    private String country;
-
-    // Statuts de conformité
+    private Set<String> roles;
+    private Set<String> permissions;
     private KYCStatus kycStatus;
     private AMLStatus amlStatus;
     private Integer riskScore;
-    private Boolean isActive;
-    private Boolean isLocked;
     private Boolean mfaEnabled;
     private Boolean mfaRequired;
-
-    // Rôles et permissions
-    private List<String> roles;
-    private List<String> permissions;
-
-    // Informations de session
+    private Boolean isCompliant;
     private String sessionId;
     private LocalDateTime loginTime;
     private String deviceId;
-    private String userAgent;
     private String ipAddress;
-
-    // Messages et avertissements
-    private String message;
-    private List<String> warnings;
-    private List<String> requiredActions;
 
     // Constructeurs
     public LoginResponse() {}
@@ -63,6 +43,7 @@ public class LoginResponse {
         this.refreshToken = refreshToken;
         this.expiresIn = expiresIn;
         this.expiresAt = LocalDateTime.now().plusSeconds(expiresIn);
+        this.loginTime = LocalDateTime.now();
     }
 
     // Getters et Setters
@@ -109,19 +90,11 @@ public class LoginResponse {
         this.expiresAt = expiresAt;
     }
 
-    public String getScope() {
-        return scope;
-    }
-
-    public void setScope(String scope) {
-        this.scope = scope;
-    }
-
-    public UUID getUserId() {
+    public String getUserId() {
         return userId;
     }
 
-    public void setUserId(UUID userId) {
+    public void setUserId(String userId) {
         this.userId = userId;
     }
 
@@ -165,28 +138,20 @@ public class LoginResponse {
         this.fullName = fullName;
     }
 
-    public String getPhone() {
-        return phone;
+    public Set<String> getRoles() {
+        return roles;
     }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
+    public void setRoles(Set<String> roles) {
+        this.roles = roles;
     }
 
-    public String getNationality() {
-        return nationality;
+    public Set<String> getPermissions() {
+        return permissions;
     }
 
-    public void setNationality(String nationality) {
-        this.nationality = nationality;
-    }
-
-    public String getCountry() {
-        return country;
-    }
-
-    public void setCountry(String country) {
-        this.country = country;
+    public void setPermissions(Set<String> permissions) {
+        this.permissions = permissions;
     }
 
     public KYCStatus getKycStatus() {
@@ -213,22 +178,6 @@ public class LoginResponse {
         this.riskScore = riskScore;
     }
 
-    public Boolean getIsActive() {
-        return isActive;
-    }
-
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
-    }
-
-    public Boolean getIsLocked() {
-        return isLocked;
-    }
-
-    public void setIsLocked(Boolean isLocked) {
-        this.isLocked = isLocked;
-    }
-
     public Boolean getMfaEnabled() {
         return mfaEnabled;
     }
@@ -245,20 +194,12 @@ public class LoginResponse {
         this.mfaRequired = mfaRequired;
     }
 
-    public List<String> getRoles() {
-        return roles;
+    public Boolean getIsCompliant() {
+        return isCompliant;
     }
 
-    public void setRoles(List<String> roles) {
-        this.roles = roles;
-    }
-
-    public List<String> getPermissions() {
-        return permissions;
-    }
-
-    public void setPermissions(List<String> permissions) {
-        this.permissions = permissions;
+    public void setIsCompliant(Boolean isCompliant) {
+        this.isCompliant = isCompliant;
     }
 
     public String getSessionId() {
@@ -285,44 +226,12 @@ public class LoginResponse {
         this.deviceId = deviceId;
     }
 
-    public String getUserAgent() {
-        return userAgent;
-    }
-
-    public void setUserAgent(String userAgent) {
-        this.userAgent = userAgent;
-    }
-
     public String getIpAddress() {
         return ipAddress;
     }
 
     public void setIpAddress(String ipAddress) {
         this.ipAddress = ipAddress;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public List<String> getWarnings() {
-        return warnings;
-    }
-
-    public void setWarnings(List<String> warnings) {
-        this.warnings = warnings;
-    }
-
-    public List<String> getRequiredActions() {
-        return requiredActions;
-    }
-
-    public void setRequiredActions(List<String> requiredActions) {
-        this.requiredActions = requiredActions;
     }
 
     // Méthodes utilitaires
@@ -338,45 +247,45 @@ public class LoginResponse {
         return permissions != null && permissions.contains(permission);
     }
 
-    public boolean requiresKYCVerification() {
-        return kycStatus == KYCStatus.NOT_VERIFIED || kycStatus == KYCStatus.PENDING;
+    public boolean isAdmin() {
+        return hasRole("ADMIN") || hasRole("SUPER_ADMIN");
     }
 
-    public boolean requiresAMLVerification() {
-        return amlStatus == AMLStatus.NOT_CHECKED || amlStatus == AMLStatus.PENDING;
+    public boolean isUser() {
+        return hasRole("USER");
+    }
+
+    public boolean isComplianceRequired() {
+        return kycStatus != KYCStatus.VERIFIED || amlStatus != AMLStatus.PASSED;
     }
 
     public boolean isHighRisk() {
-        return riskScore != null && riskScore >= 70;
-    }
-
-    public boolean isAccountLocked() {
-        return isLocked != null && isLocked;
-    }
-
-    public boolean isAccountActive() {
-        return isActive != null && isActive;
+        return riskScore != null && riskScore >= 7;
     }
 
     @Override
     public String toString() {
         return "LoginResponse{" +
-                "userId=" + userId +
+                "accessToken='" + (accessToken != null ? "***" : "null") + '\'' +
+                ", refreshToken='" + (refreshToken != null ? "***" : "null") + '\'' +
+                ", tokenType='" + tokenType + '\'' +
+                ", expiresIn=" + expiresIn +
+                ", expiresAt=" + expiresAt +
+                ", userId='" + userId + '\'' +
                 ", username='" + username + '\'' +
                 ", email='" + email + '\'' +
                 ", fullName='" + fullName + '\'' +
+                ", roles=" + roles +
                 ", kycStatus=" + kycStatus +
                 ", amlStatus=" + amlStatus +
                 ", riskScore=" + riskScore +
-                ", isActive=" + isActive +
-                ", isLocked=" + isLocked +
                 ", mfaEnabled=" + mfaEnabled +
                 ", mfaRequired=" + mfaRequired +
-                ", roles=" + roles +
+                ", isCompliant=" + isCompliant +
                 ", sessionId='" + sessionId + '\'' +
                 ", loginTime=" + loginTime +
-                ", expiresAt=" + expiresAt +
-                ", message='" + message + '\'' +
+                ", deviceId='" + deviceId + '\'' +
+                ", ipAddress='" + ipAddress + '\'' +
                 '}';
     }
 }
