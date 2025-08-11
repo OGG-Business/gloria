@@ -1,6 +1,5 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings
-from pydantic import BaseModel
 
 class Settings(BaseSettings):
     # App
@@ -23,14 +22,26 @@ class Settings(BaseSettings):
     oidc_issuer_url: str = "http://keycloak:8080/realms/payments"
     oidc_audience: str = "payments-api"
 
-    # Connectors
+    # ISO20022
+    iso20022_xsd_dir: str | None = None  # e.g., /opt/iso20022/xsd
+
+    # Connectors (SWIFT)
     connector_swift_mode: str = "dry-run"  # dry-run | live
-    connector_swift_endpoint: str = "https://bank.example.com/as4"
+    connector_swift_protocol: str = "REST"  # REST | SFTP | AS4
+    connector_swift_endpoint: str = "https://bank.example.com/as4"  # REST/AS4 base URL
     connector_swift_tls_client_cert_path: str = "/secrets/swift/client_cert.pem"
     connector_swift_tls_client_key_path: str = "/secrets/swift/client_key.pem"
     connector_swift_tls_ca_chain_path: str = "/secrets/swift/ca_chain.pem"
     connector_swift_username: str | None = None
     connector_swift_password: str | None = None
+
+    # SFTP specifics
+    connector_swift_sftp_host: str | None = None
+    connector_swift_sftp_port: int = 22
+    connector_swift_sftp_username: str | None = None
+    connector_swift_sftp_password: str | None = None
+    connector_swift_sftp_key_path: str | None = None
+    connector_swift_sftp_remote_dir: str | None = None
 
     # AML/KYC
     aml_threshold_usd: float = 10000.0

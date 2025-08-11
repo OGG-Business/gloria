@@ -1,9 +1,29 @@
 from lxml import etree
 from decimal import Decimal
+import os
+from app.config import get_settings
 
 NS = {"doc": "urn:iso:std:iso:20022:tech:xsd:pacs.008.001.10"}
+settings = get_settings()
+_schema = None
 
-SCHEMA_XSD = None  # In production, load official XSDs
+def _get_schema():
+    global _schema
+    if _schema is not None:
+        return _schema
+    xsd_dir = settings.iso20022_xsd_dir
+    if not xsd_dir:
+        _schema = None
+        return None
+    # Expect the official XSDs to be placed in this directory
+    main_xsd = os.path.join(xsd_dir, "pacs.008.001.10.xsd")
+    if not os.path.exists(main_xsd):
+        _schema = None
+        return None
+    with open(main_xsd, 'rb') as f:
+        xmlschema_doc = etree.parse(f)
+    _schema = etree.XMLSchema(xmlschema_doc)
+    return _schema
 
 
 def build_pacs008_xml(debtor_iban: str, creditor_iban: str, creditor_bic: str, amount: Decimal, currency: str, reference: str | None) -> str:
@@ -33,8 +53,10 @@ def build_pacs008_xml(debtor_iban: str, creditor_iban: str, creditor_bic: str, a
 
 def validate_pacs008(xml_str: str) -> tuple[bool, str | None]:
     try:
-        etree.fromstring(xml_str.encode())
-        # Optionally validate against XSD if provided
+        doc = etree.fromstring(xml_str.encode())
+        schema = _get_schema()
+        if schema is not None:
+            schema.assertValid(doc)
         return True, None
     except Exception as exc:
         return False, str(exc)
