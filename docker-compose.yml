@@ -1,0 +1,81 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment
+      POSTGRES_DB: payments
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  flyway:
+    image: flyway/flyway:10
+    command: -url=jdbc:postgresql://postgres:5432/payments -user=payment -password=payment -locations=filesystem:/flyway/sql migrate
+    volumes:
+      - ./migrations/flyway/sql:/flyway/sql
+    depends_on:
+      - postgres
+
+  seed:
+    image: postgres:16
+    command: bash -lc "psql -h postgres -U payment -d payments -f /seed/dev_data.sql"
+    environment:
+      PGPASSWORD: payment
+    volumes:
+      - ./scripts:/seed
+    depends_on:
+      - flyway
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://payment:payment@postgres:5432/payments
+      DEV_MODE_NO_AUTH: "true"
+      SECRETS_BACKEND: env
+      AML_BLOCK_THRESHOLD_USD: "10000"
+      DRY_RUN: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - flyway
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: grafana
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  grafana:

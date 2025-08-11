@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "open-payments-hub.fullname" . }}-backend
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "open-payments-hub.name" . }}
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: {{ include "open-payments-hub.name" . }}
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: {{ .Values.image.backend }}
+          ports:
+            - containerPort: 8000
+          env:
+            {{- range $k, $v := .Values.backend.env }}
+            - name: {{ $k }}
+              value: "{{ $v }}"
+            {{- end }}

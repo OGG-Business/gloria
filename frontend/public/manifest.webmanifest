@@ -1,0 +1,9 @@
+{
+  "name": "Open Payments Hub",
+  "short_name": "OPH",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": []
+}

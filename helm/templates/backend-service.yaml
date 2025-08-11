@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "open-payments-hub.fullname" . }}-backend
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: {{ include "open-payments-hub.name" . }}
+    tier: backend
+  ports:
+    - name: http
+      port: {{ .Values.service.backendPort }}
+      targetPort: 8000

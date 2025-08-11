@@ -172,3 +172,26 @@ ig*
 .github_access_token
 LICENSE.rtf
 rnd/autogpt_server/settings.py
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Env
+.env
+.env.*
+
+# Secrets
+secrets/
+*.crt
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/

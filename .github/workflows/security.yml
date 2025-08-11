@@ -1,0 +1,46 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  trivy-filesystem:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          format: 'table'
+          exit-code: '0'
+          scanners: 'vuln,config,secret'
+
+  trivy-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t backend:scan -f backend/Dockerfile .
+      - name: Build frontend image
+        run: docker build -t frontend:scan frontend
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'backend:scan'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'frontend:scan'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'

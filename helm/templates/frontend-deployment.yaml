@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "open-payments-hub.fullname" . }}-frontend
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "open-payments-hub.name" . }}
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: {{ include "open-payments-hub.name" . }}
+        tier: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: {{ .Values.image.frontend }}
+          ports:
+            - containerPort: 80

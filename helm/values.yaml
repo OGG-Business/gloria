@@ -1,0 +1,29 @@
+image:
+  backend: "gcr.io/PROJECT_ID/open-payments-backend:latest"
+  frontend: "gcr.io/PROJECT_ID/open-payments-frontend:latest"
+
+backend:
+  replicas: 2
+  env:
+    DATABASE_URL: "postgresql://payment:payment@postgres:5432/payments"
+    DEV_MODE_NO_AUTH: "true"
+    SECRETS_BACKEND: "gsm"
+    AML_BLOCK_THRESHOLD_USD: "10000"
+    DRY_RUN: "true"
+  resources: {}
+
+frontend:
+  replicas: 2
+  resources: {}
+
+service:
+  type: ClusterIP
+  backendPort: 8000
+  frontendPort: 80
+
+ingress:
+  enabled: true
+  host: payments.example.com
+  tls:
+    enabled: true
+    secretName: payments-tls

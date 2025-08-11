@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: Open Payments Hub API
+  version: 0.1.0
+servers:
+  - url: https://api.payments.example.com
+x-google-endpoints:
+  - name: api.payments.example.com
+    allowCors: true
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthOut'
+  /accounts:
+    get:
+      summary: List accounts
+      operationId: listAccounts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountOut'
+      security:
+        - oidc: []
+    post:
+      summary: Create account
+      operationId: createAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountOut'
+      security:
+        - oidc: []
+  /transfers:
+    post:
+      summary: Create transfer
+      operationId: createTransfer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOut'
+      security:
+        - oidc: []
+  /transfers/{id}:
+    get:
+      summary: Get transfer
+      operationId: getTransfer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOut'
+      security:
+        - oidc: []
+  /transfers/{id}/events:
+    get:
+      summary: List transfer events
+      operationId: listTransferEvents
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransferEventOut'
+      security:
+        - oidc: []
+  /kyc/upload:
+    post:
+      summary: Upload KYC document
+      operationId: uploadKyc
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KYCDocumentIn'
+      responses:
+        '200':
+          description: OK
+      security:
+        - oidc: []
+  /admin/logs:
+    get:
+      summary: Get audit logs
+      operationId: adminLogs
+      responses:
+        '200':
+          description: OK
+      security:
+        - oidc: []
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://accounts.google.com/.well-known/openid-configuration
+  schemas:
+    HealthOut:
+      type: object
+      properties:
+        status:
+          type: string
+        environment:
+          type: string
+    AccountCreate:
+      type: object
+      required: [user_id, name, iban]
+      properties:
+        user_id:
+          type: string
+        name:
+          type: string
+        iban:
+          type: string
+        bic:
+          type: string
+    AccountOut:
+      allOf:
+        - $ref: '#/components/schemas/AccountCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            is_active:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+    TransferCreate:
+      type: object
+      required: [debtor_account_id, creditor_name, creditor_iban, amount, currency]
+      properties:
+        debtor_account_id:
+          type: integer
+        creditor_name:
+          type: string
+        creditor_iban:
+          type: string
+        creditor_bic:
+          type: string
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+    TransferOut:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        created_at: { type: string, format: date-time }
+    TransferEventOut:
+      type: object
+      properties:
+        id: { type: integer }
+        transfer_id: { type: integer }
+        type: { type: string }
+        payload: { type: object }
+        created_at: { type: string, format: date-time }
+    KYCDocumentIn:
+      type: object
+      properties:
+        doc_type: { type: string }
+        filename: { type: string }
+        base64_content: { type: string }
