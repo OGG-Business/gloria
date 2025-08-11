@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: OpenBank Transfers Platform
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /auth/me:
+    get:
+      summary: Current user info
+      responses:
+        '200': { description: OK }
+  /accounts:
+    post:
+      summary: Create account
+      responses:
+        '200': { description: OK }
+  /transfers:
+    post:
+      summary: Create transfer
+      responses:
+        '200': { description: OK }
+  /transfers/{id}/events:
+    get:
+      summary: Get transfer events
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /kyc/documents:
+    post:
+      summary: Upload KYC document
+      responses:
+        '200': { description: OK }
+  /admin/audit:
+    get:
+      summary: Audit tail
+      responses:
+        '200': { description: OK }

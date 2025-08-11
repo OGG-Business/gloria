@@ -1,0 +1,11 @@
+[
+  {
+    "amount": 100.0,
+    "currency": "USD",
+    "debtor_iban": "DE89370400440532013000",
+    "debtor_bic": "DEUTDEFF",
+    "creditor_iban": "GB29NWBK60161331926819",
+    "creditor_bic": "NWBKGB2L",
+    "remittance_info": "Sample invoice"
+  }
+]
