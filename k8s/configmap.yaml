@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swiftpay-config
+  namespace: swiftpay
+  labels:
+    app: swiftpay
+data:
+  # Spring profiles
+  SPRING_PROFILES_ACTIVE: "production,docker"
+  
+  # Database configuration
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/swiftpay"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  SPRING_JPA_SHOW_SQL: "false"
+  SPRING_FLYWAY_ENABLED: "true"
+  SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+  
+  # Redis configuration
+  SPRING_DATA_REDIS_HOST: "redis-master"
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_DATA_REDIS_DATABASE: "0"
+  SPRING_DATA_REDIS_TIMEOUT: "2000ms"
+  
+  # Server configuration
+  SERVER_PORT: "8080"
+  MANAGEMENT_SERVER_PORT: "8081"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "when-authorized"
+  
+  # Security configuration
+  SWIFTPAY_SECURITY_CORS_ALLOWED_ORIGINS: "https://swiftpay.example.com"
+  SWIFTPAY_SECURITY_RATE_LIMIT_ENABLED: "true"
+  SWIFTPAY_SECURITY_RATE_LIMIT_REQUESTS_PER_MINUTE: "100"
+  
+  # Vault configuration
+  SWIFTPAY_VAULT_ENABLED: "true"
+  SWIFTPAY_VAULT_HOST: "vault.vault.svc.cluster.local"
+  SWIFTPAY_VAULT_PORT: "8200"
+  SWIFTPAY_VAULT_SCHEME: "https"
+  SWIFTPAY_VAULT_KV_PATH: "secret/swiftpay"
+  
+  # SWIFT configuration
+  SWIFTPAY_SWIFT_ENABLED: "true"
+  SWIFTPAY_SWIFT_ENVIRONMENT: "production"
+  SWIFTPAY_SWIFT_TIMEOUT: "30000"
+  SWIFTPAY_SWIFT_RETRY_ATTEMPTS: "3"
+  SWIFTPAY_SWIFT_TLS_ENABLED: "true"
+  
+  # Mojaloop configuration
+  SWIFTPAY_MOJALOOP_ENABLED: "true"
+  SWIFTPAY_MOJALOOP_ENVIRONMENT: "production"
+  SWIFTPAY_MOJALOOP_TIMEOUT: "15000"
+  SWIFTPAY_MOJALOOP_RETRY_ATTEMPTS: "3"
+  
+  # KYC/AML configuration
+  SWIFTPAY_KYC_ENABLED: "true"
+  SWIFTPAY_KYC_VERIFICATION_REQUIRED: "true"
+  SWIFTPAY_KYC_DOCUMENT_RETENTION_DAYS: "2555"
+  SWIFTPAY_AML_ENABLED: "true"
+  SWIFTPAY_AML_THRESHOLD_AMOUNT: "10000"
+  SWIFTPAY_AML_THRESHOLD_CURRENCY: "USD"
+  SWIFTPAY_SANCTIONS_SCREENING_ENABLED: "true"
+  
+  # File upload configuration
+  SWIFTPAY_FILES_UPLOAD_MAX_SIZE: "10MB"
+  SWIFTPAY_FILES_UPLOAD_ALLOWED_TYPES: "image/jpeg,image/png,application/pdf"
+  SWIFTPAY_FILES_STORAGE_PATH: "/app/uploads"
+  
+  # Webhook configuration
+  SWIFTPAY_WEBHOOKS_ENABLED: "true"
+  SWIFTPAY_WEBHOOKS_TIMEOUT: "10000"
+  SWIFTPAY_WEBHOOKS_RETRY_ATTEMPTS: "3"
+  SWIFTPAY_WEBHOOKS_RETRY_DELAY: "5000"
+  
+  # Logging configuration
+  LOGGING_LEVEL_COM_SWIFTPAY: "INFO"
+  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: "WARN"
+  LOGGING_PATTERN_CONSOLE: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+  
+  # Metrics configuration
+  MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: "true"
+  MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES_HISTOGRAM_HTTP_SERVER_REQUESTS: "true"
+  
+  # Application info
+  INFO_APP_NAME: "SwiftPay"
+  INFO_APP_DESCRIPTION: "Global Bank Transfer Management System"
+  INFO_APP_VERSION: "1.0.0"
+  INFO_APP_ENVIRONMENT: "production"

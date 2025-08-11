@@ -1,0 +1,176 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "swiftpay.fullname" . }}-backend
+  labels:
+    {{- include "swiftpay.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "swiftpay.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "swiftpay.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "swiftpay.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-backend
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: management
+              containerPort: {{ .Values.service.managementPort }}
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "{{ .Values.global.environment }},kubernetes"
+            - name: DB_HOST
+              value: "{{ .Values.database.host }}"
+            - name: DB_PORT
+              value: "{{ .Values.database.port }}"
+            - name: DB_NAME
+              value: "{{ .Values.database.name }}"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-database
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-database
+                  key: password
+            - name: REDIS_HOST
+              value: "{{ .Values.redis.host }}"
+            - name: REDIS_PORT
+              value: "{{ .Values.redis.port }}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-redis
+                  key: password
+            - name: VAULT_URI
+              value: "{{ .Values.vault.url }}"
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-vault
+                  key: token
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-encryption
+                  key: key
+            - name: ENCRYPTION_SALT
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-encryption
+                  key: salt
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-keycloak
+                  key: client-secret
+            - name: SWIFT_BIC
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-swift
+                  key: bic
+            - name: SWIFT_CLIENT_CERT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-swift
+                  key: cert-password
+            - name: SWIFT_CA_CERT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-swift
+                  key: ca-password
+            - name: MOJALOOP_PARTICIPANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-mojaloop
+                  key: participant-id
+            - name: MOJALOOP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swiftpay-mojaloop
+                  key: api-key
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: swift-certs
+              mountPath: /app/certs/swift
+              readOnly: true
+            - name: tls-certs
+              mountPath: /app/certs/tls
+              readOnly: true
+            - name: kyc-storage
+              mountPath: /app/data/kyc-documents
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: swift-certs
+          secret:
+            secretName: swiftpay-swift-certs
+            defaultMode: 0600
+        - name: tls-certs
+          secret:
+            secretName: swiftpay-tls
+            defaultMode: 0600
+        - name: kyc-storage
+          persistentVolumeClaim:
+            claimName: swiftpay-kyc-storage
+        - name: logs
+          persistentVolumeClaim:
+            claimName: swiftpay-logs
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

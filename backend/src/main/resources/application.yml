@@ -1,0 +1,284 @@
+spring:
+  application:
+    name: swiftpay-backend
+    
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:development}
+    
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:swiftpay}
+    username: ${DB_USERNAME:swiftpay}
+    password: ${DB_PASSWORD:swiftpay123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          time_zone: UTC
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+        
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:http://localhost:8180/realms/swiftpay}
+          
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000 # 1 hour
+      cache-null-values: false
+      
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_FILE_SIZE:10MB}
+      
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    time-zone: UTC
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    session:
+      timeout: 30m
+      cookie:
+        secure: true
+        http-only: true
+        same-site: strict
+  ssl:
+    enabled: false # Enabled in production with proper certificates
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+    
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,flyway
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: ${PROMETHEUS_ENABLED:true}
+        step: 30s
+    tags:
+      application: ${spring.application.name}
+      environment: ${APP_ENVIRONMENT:development}
+
+logging:
+  level:
+    com.swiftpay: ${LOG_LEVEL:INFO}
+    org.springframework.security: WARN
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+  file:
+    name: logs/swiftpay.log
+    max-size: 100MB
+    max-history: 30
+
+# Application custom properties
+swiftpay:
+  app:
+    name: ${APP_NAME:SwiftPay}
+    version: ${APP_VERSION:1.0.0}
+    environment: ${APP_ENVIRONMENT:development}
+    
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+    
+  security:
+    jwt:
+      secret: ${JWT_SECRET:dev-secret-key-change-in-production}
+      expiration: 86400000 # 24 hours
+    session:
+      secret: ${SESSION_SECRET:dev-session-secret-change-in-production}
+    csrf:
+      secret: ${CSRF_SECRET:dev-csrf-secret-change-in-production}
+      
+  encryption:
+    key-alias: ${ENCRYPTION_KEY_ALIAS:swiftpay-encryption-key}
+    algorithm: ${ENCRYPTION_ALGORITHM:AES/GCM/NoPadding}
+    
+  vault:
+    host: ${VAULT_HOST:localhost}
+    port: ${VAULT_PORT:8200}
+    scheme: ${VAULT_SCHEME:http}
+    token: ${VAULT_TOKEN:dev-token}
+    kv-path: ${VAULT_KV_PATH:secret/swiftpay}
+    
+  swift:
+    enabled: ${SWIFT_ENABLED:false}
+    bic: ${SWIFT_BIC:TESTBICXXX}
+    endpoint-url: ${SWIFT_ENDPOINT_URL:https://sandbox.swift.com/swift-api}
+    client-cert-path: ${SWIFT_CLIENT_CERT_PATH:/etc/ssl/certs/swift-client.p12}
+    client-cert-password: ${SWIFT_CLIENT_CERT_PASSWORD:your-cert-password}
+    ca-cert-path: ${SWIFT_CA_CERT_PATH:/etc/ssl/certs/swift-ca.pem}
+    mutual-tls-enabled: ${SWIFT_MUTUAL_TLS_ENABLED:true}
+    timeout: 30000
+    
+  mojaloop:
+    enabled: ${MOJALOOP_ENABLED:false}
+    endpoint-url: ${MOJALOOP_ENDPOINT_URL:https://sandbox.mojaloop.io}
+    participant-id: ${MOJALOOP_PARTICIPANT_ID:swiftpay}
+    api-key: ${MOJALOOP_API_KEY:your-api-key}
+    timeout: 15000
+    
+  kyc:
+    enabled: ${KYC_ENABLED:true}
+    document-storage-path: ${KYC_DOCUMENT_STORAGE_PATH:/var/swiftpay/kyc-documents}
+    max-transaction-amount-usd: ${KYC_MAX_TRANSACTION_AMOUNT_USD:10000}
+    
+  aml:
+    sanctions-api-url: ${AML_SANCTIONS_API_URL:https://api.sanctions-list.com}
+    sanctions-api-key: ${AML_SANCTIONS_API_KEY:your-sanctions-api-key}
+    
+  notification:
+    email:
+      enabled: ${NOTIFICATION_EMAIL_ENABLED:true}
+      smtp:
+        host: ${SMTP_HOST:localhost}
+        port: ${SMTP_PORT:587}
+        username: ${SMTP_USERNAME:swiftpay@example.com}
+        password: ${SMTP_PASSWORD:smtp-password}
+        auth: true
+        starttls: true
+    sms:
+      enabled: ${NOTIFICATION_SMS_ENABLED:false}
+      provider: ${SMS_PROVIDER:twilio}
+      api-key: ${SMS_API_KEY:your-sms-api-key}
+      
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    requests-per-minute: ${RATE_LIMIT_REQUESTS_PER_MINUTE:100}
+    
+  webhook:
+    secret: ${WEBHOOK_SECRET:your-webhook-secret}
+    timeout-seconds: ${WEBHOOK_TIMEOUT_SECONDS:30}
+
+# Springdoc OpenAPI
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    enabled: ${ENABLE_SWAGGER_UI:true}
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    
+---
+# Docker profile
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/swiftpay
+  data:
+    redis:
+      host: redis
+      
+swiftpay:
+  vault:
+    host: vault
+    scheme: http
+    
+---
+# Production profile
+spring:
+  config:
+    activate:
+      on-profile: production
+  datasource:
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+  jpa:
+    show-sql: false
+    
+server:
+  ssl:
+    enabled: true
+    key-store: ${SSL_KEYSTORE_PATH:/etc/ssl/swiftpay/keystore.p12}
+    key-store-password: ${SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+        
+logging:
+  level:
+    com.swiftpay: INFO
+    org.springframework: WARN
+    
+swiftpay:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+    session:
+      secret: ${SESSION_SECRET}
+    csrf:
+      secret: ${CSRF_SECRET}
+  vault:
+    scheme: https
+    
+springdoc:
+  swagger-ui:
+    enabled: false # Disabled in production

@@ -1,0 +1,1155 @@
+openapi: 3.0.3
+info:
+  title: SwiftPay API
+  description: |
+    API complète pour la gestion de transferts bancaires SWIFT & IBAN
+    
+    ## Fonctionnalités
+    - Initiation et suivi de transferts internationaux
+    - Validation IBAN/BIC avec support pays africains
+    - Intégration SWIFT (ISO 20022) et Mojaloop
+    - KYC/AML automatisé avec screening sanctions
+    - Chiffrement des données sensibles
+    - Audit complet et traçabilité
+    
+    ## Sécurité
+    - OAuth2/OIDC avec Keycloak
+    - TLS 1.3 obligatoire
+    - Rate limiting par utilisateur/IP
+    - Chiffrement AES-256 pour données sensibles
+    
+    ## Support Géographique
+    Focus particulier sur les banques opérant en République Démocratique du Congo (RDC)
+    et les corridors de paiement africains via Mojaloop.
+    
+  version: 1.0.0
+  contact:
+    name: SwiftPay Support
+    email: support@swiftpay.com
+    url: https://swiftpay.com/support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080/api
+    description: Développement local
+  - url: https://api-staging.swiftpay.com/api
+    description: Environnement de test
+  - url: https://api.swiftpay.com/api
+    description: Production
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenu via OAuth2/OIDC
+
+  schemas:
+    # Entités principales
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          maxLength: 20
+        nationality:
+          type: string
+          maxLength: 3
+          description: Code pays ISO 3166-1 alpha-3
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, BLOCKED, PENDING_VERIFICATION]
+        role:
+          type: string
+          enum: [USER, OPERATOR, ADMIN]
+        mfaEnabled:
+          type: boolean
+        kycStatus:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BankAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        accountName:
+          type: string
+          maxLength: 255
+        iban:
+          type: string
+          maxLength: 34
+          description: IBAN pour pays supportés
+        bic:
+          type: string
+          maxLength: 11
+          description: Code BIC/SWIFT
+        accountNumber:
+          type: string
+          maxLength: 50
+          description: Numéro de compte local pour pays sans IBAN
+        bankName:
+          type: string
+          maxLength: 255
+        bankAddress:
+          type: string
+        countryCode:
+          type: string
+          maxLength: 3
+          description: Code pays ISO 3166-1 alpha-3
+        currency:
+          type: string
+          maxLength: 3
+          description: Code devise ISO 4217
+        accountType:
+          type: string
+          enum: [CHECKING, SAVINGS, BUSINESS]
+        isVerified:
+          type: boolean
+        isPrimary:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        referenceNumber:
+          type: string
+          maxLength: 50
+          description: Numéro de référence unique
+        userId:
+          type: string
+          format: uuid
+        fromAccountId:
+          type: string
+          format: uuid
+        toAccountId:
+          type: string
+          format: uuid
+          nullable: true
+        recipientName:
+          type: string
+          maxLength: 255
+        recipientIban:
+          type: string
+          maxLength: 34
+        recipientBic:
+          type: string
+          maxLength: 11
+        recipientAccountNumber:
+          type: string
+          maxLength: 50
+        recipientBankName:
+          type: string
+          maxLength: 255
+        recipientCountryCode:
+          type: string
+          maxLength: 3
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+        currency:
+          type: string
+          maxLength: 3
+        exchangeRate:
+          type: number
+          format: decimal
+        feeAmount:
+          type: number
+          format: decimal
+        totalAmount:
+          type: number
+          format: decimal
+        purposeCode:
+          type: string
+          maxLength: 10
+          description: Code de purpose ISO 20022
+        remittanceInfo:
+          type: string
+          description: Information de remise
+        urgent:
+          type: boolean
+        status:
+          type: string
+          enum: [INITIATED, PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+        initiatedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expectedCompletionDate:
+          type: string
+          format: date
+        swiftMessageId:
+          type: string
+          maxLength: 100
+        mojaloopTransactionId:
+          type: string
+          maxLength: 100
+        bankReference:
+          type: string
+          maxLength: 100
+        errorCode:
+          type: string
+          maxLength: 50
+        errorMessage:
+          type: string
+        retryCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    TransferEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        transferId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          maxLength: 50
+        fromStatus:
+          type: string
+          maxLength: 20
+        toStatus:
+          type: string
+          maxLength: 20
+        eventData:
+          type: object
+          additionalProperties: true
+        correlationId:
+          type: string
+          format: uuid
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    # DTOs de requête
+    TransferCreateRequest:
+      type: object
+      required:
+        - fromAccountId
+        - amount
+        - currency
+        - recipientName
+      properties:
+        fromAccountId:
+          type: string
+          format: uuid
+        toAccountId:
+          type: string
+          format: uuid
+          nullable: true
+        recipientName:
+          type: string
+          maxLength: 255
+        recipientIban:
+          type: string
+          maxLength: 34
+        recipientBic:
+          type: string
+          maxLength: 11
+        recipientAccountNumber:
+          type: string
+          maxLength: 50
+        recipientBankName:
+          type: string
+          maxLength: 255
+        recipientBankAddress:
+          type: string
+        recipientCountryCode:
+          type: string
+          maxLength: 3
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+        currency:
+          type: string
+          maxLength: 3
+        purposeCode:
+          type: string
+          maxLength: 10
+        remittanceInfo:
+          type: string
+        urgent:
+          type: boolean
+          default: false
+
+    FeeCalculationRequest:
+      type: object
+      required:
+        - fromCountry
+        - toCountry
+        - currency
+        - amount
+      properties:
+        fromCountry:
+          type: string
+          maxLength: 3
+        toCountry:
+          type: string
+          maxLength: 3
+        currency:
+          type: string
+          maxLength: 3
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+        urgent:
+          type: boolean
+          default: false
+
+    FeeCalculationResponse:
+      type: object
+      properties:
+        feeAmount:
+          type: number
+          format: decimal
+        totalAmount:
+          type: number
+          format: decimal
+        feeType:
+          type: string
+          enum: [FIXED, PERCENTAGE, TIERED]
+        description:
+          type: string
+
+    # Réponses d'erreur
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+        correlationId:
+          type: string
+          format: uuid
+
+    ValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        rejectedValue:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Requête invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    Unauthorized:
+      description: Non authentifié
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    Forbidden:
+      description: Accès interdit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    NotFound:
+      description: Ressource non trouvée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    InternalServerError:
+      description: Erreur interne du serveur
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+paths:
+  # Authentification
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Connexion utilisateur
+      description: Authentifie un utilisateur et retourne un token JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                mfaCode:
+                  type: string
+                  description: Code MFA si activé
+      responses:
+        '200':
+          description: Connexion réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  refreshToken:
+                    type: string
+                  expiresIn:
+                    type: integer
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Rafraîchir le token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token rafraîchi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  expiresIn:
+                    type: integer
+
+  # Gestion des comptes
+  /accounts:
+    get:
+      tags:
+        - Accounts
+      summary: Lister les comptes bancaires
+      description: Récupère la liste des comptes bancaires de l'utilisateur connecté
+      responses:
+        '200':
+          description: Liste des comptes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BankAccount'
+    
+    post:
+      tags:
+        - Accounts
+      summary: Ajouter un compte bancaire
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountName
+                - bankName
+                - countryCode
+                - currency
+              properties:
+                accountName:
+                  type: string
+                  maxLength: 255
+                iban:
+                  type: string
+                  maxLength: 34
+                bic:
+                  type: string
+                  maxLength: 11
+                accountNumber:
+                  type: string
+                  maxLength: 50
+                bankName:
+                  type: string
+                  maxLength: 255
+                bankAddress:
+                  type: string
+                countryCode:
+                  type: string
+                  maxLength: 3
+                currency:
+                  type: string
+                  maxLength: 3
+                accountType:
+                  type: string
+                  enum: [CHECKING, SAVINGS, BUSINESS]
+      responses:
+        '201':
+          description: Compte créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAccount'
+
+  /accounts/{id}/verify:
+    post:
+      tags:
+        - Accounts
+      summary: Vérifier un compte bancaire
+      description: Lance la procédure de vérification d'un compte (micro-dépôts ou autre)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Vérification initiée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  verificationMethod:
+                    type: string
+                  estimatedTime:
+                    type: string
+
+  # Gestion des transferts
+  /transfers:
+    get:
+      tags:
+        - Transfers
+      summary: Lister les transferts
+      description: Récupère la liste paginée des transferts de l'utilisateur
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [INITIATED, PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+        - name: currency
+          in: query
+          schema:
+            type: string
+            maxLength: 3
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: "createdAt,desc"
+      responses:
+        '200':
+          description: Liste des transferts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transfer'
+                  pageable:
+                    type: object
+                  totalElements:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  size:
+                    type: integer
+                  number:
+                    type: integer
+
+    post:
+      tags:
+        - Transfers
+      summary: Créer un transfert
+      description: |
+        Initie un nouveau transfert bancaire avec validation automatique:
+        - Validation IBAN/BIC ou numéro de compte local
+        - Vérification des limites KYC/AML
+        - Screening sanctions automatique
+        - Calcul des frais
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreateRequest'
+      responses:
+        '201':
+          description: Transfert créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Limites dépassées ou KYC requis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /transfers/{id}:
+    get:
+      tags:
+        - Transfers
+      summary: Détails d'un transfert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Détails du transfert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /transfers/{id}/events:
+    get:
+      tags:
+        - Transfers
+      summary: Événements d'un transfert
+      description: Récupère l'historique complet des événements d'un transfert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Historique des événements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransferEvent'
+
+  /transfers/{id}/cancel:
+    post:
+      tags:
+        - Transfers
+      summary: Annuler un transfert
+      description: Annule un transfert en statut INITIATED ou PENDING
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transfert annulé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '400':
+          description: Transfert ne peut pas être annulé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /transfers/{id}/retry:
+    post:
+      tags:
+        - Transfers
+      summary: Relancer un transfert
+      description: Relance un transfert échoué (admin/operator uniquement)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Transfert relancé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+
+  /transfers/calculate-fees:
+    post:
+      tags:
+        - Transfers
+      summary: Calculer les frais
+      description: Calcule les frais de transfert sans l'initier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeeCalculationRequest'
+      responses:
+        '200':
+          description: Frais calculés
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeCalculationResponse'
+
+  # Validation IBAN/BIC
+  /validate/iban:
+    post:
+      tags:
+        - Validation
+      summary: Valider un IBAN
+      description: |
+        Valide un IBAN selon les standards internationaux avec support étendu 
+        pour les pays africains
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - iban
+              properties:
+                iban:
+                  type: string
+                  maxLength: 34
+      responses:
+        '200':
+          description: Résultat de validation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  message:
+                    type: string
+                  countryCode:
+                    type: string
+                  countryName:
+                    type: string
+                  bankName:
+                    type: string
+                    nullable: true
+
+  /validate/bic:
+    post:
+      tags:
+        - Validation
+      summary: Valider un BIC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bic
+              properties:
+                bic:
+                  type: string
+                  maxLength: 11
+      responses:
+        '200':
+          description: Résultat de validation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  message:
+                    type: string
+                  bankName:
+                    type: string
+                  countryCode:
+                    type: string
+
+  /validate/account-number:
+    post:
+      tags:
+        - Validation
+      summary: Valider un numéro de compte local
+      description: Valide un numéro de compte pour les pays sans IBAN standard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountNumber
+                - countryCode
+              properties:
+                accountNumber:
+                  type: string
+                  maxLength: 50
+                countryCode:
+                  type: string
+                  maxLength: 3
+      responses:
+        '200':
+          description: Résultat de validation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  message:
+                    type: string
+                  format:
+                    type: string
+
+  # KYC/AML
+  /kyc/status:
+    get:
+      tags:
+        - KYC
+      summary: Statut KYC de l'utilisateur
+      responses:
+        '200':
+          description: Statut KYC
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [PENDING, IN_REVIEW, APPROVED, REJECTED, EXPIRED]
+                  level:
+                    type: string
+                    enum: [BASIC, STANDARD, PREMIUM, BUSINESS]
+                  maxDailyAmount:
+                    type: number
+                    format: decimal
+                  maxMonthlyAmount:
+                    type: number
+                    format: decimal
+                  requiredDocuments:
+                    type: array
+                    items:
+                      type: string
+                  submittedDocuments:
+                    type: array
+                    items:
+                      type: string
+
+  /kyc/documents:
+    post:
+      tags:
+        - KYC
+      summary: Uploader un document KYC
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - documentType
+              properties:
+                file:
+                  type: string
+                  format: binary
+                documentType:
+                  type: string
+                  enum: [government_id, proof_of_address, proof_of_income, business_registration]
+      responses:
+        '201':
+          description: Document uploadé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  message:
+                    type: string
+
+  # Administration
+  /admin/transfers:
+    get:
+      tags:
+        - Admin
+      summary: Lister tous les transferts (admin)
+      description: Accès admin pour voir tous les transferts du système
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: userId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Liste des transferts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transfer'
+
+  /admin/swift/test-connectivity:
+    post:
+      tags:
+        - Admin
+      summary: Tester la connectivité SWIFT
+      description: |
+        Test de connectivité SWIFT en mode dry-run.
+        **ATTENTION**: Nécessite des credentials valides fournis par la banque.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                testTransfer:
+                  $ref: '#/components/schemas/TransferCreateRequest'
+      responses:
+        '200':
+          description: Test de connectivité
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configurationValid:
+                    type: boolean
+                  networkConnectivity:
+                    type: boolean
+                  message:
+                    type: string
+                  testMessageId:
+                    type: string
+
+  # Webhooks
+  /hooks/transfer-update:
+    post:
+      tags:
+        - Webhooks
+      summary: Webhook de mise à jour de transfert
+      description: |
+        Endpoint pour recevoir les mises à jour de statut depuis les systèmes externes
+        (banques, SWIFT, Mojaloop)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transferId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                bankReference:
+                  type: string
+                timestamp:
+                  type: string
+                  format: date-time
+                signature:
+                  type: string
+                  description: Signature HMAC pour vérification
+      responses:
+        '200':
+          description: Webhook traité
+        '400':
+          description: Signature invalide ou données incorrectes
+
+  # Métriques et monitoring
+  /metrics/dashboard:
+    get:
+      tags:
+        - Metrics
+      summary: Métriques pour dashboard
+      description: Métriques agrégées pour l'affichage dashboard
+      responses:
+        '200':
+          description: Métriques dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalTransfers:
+                    type: integer
+                  completedTransfers:
+                    type: integer
+                  totalVolume:
+                    type: number
+                    format: decimal
+                  averageProcessingTime:
+                    type: number
+                    description: Temps moyen en secondes
+                  successRate:
+                    type: number
+                    format: percentage
+
+tags:
+  - name: Authentication
+    description: Gestion de l'authentification et des sessions
+  - name: Accounts
+    description: Gestion des comptes bancaires
+  - name: Transfers
+    description: Initiation et suivi des transferts
+  - name: Validation
+    description: Validation IBAN/BIC et numéros de compte
+  - name: KYC
+    description: Know Your Customer et vérification d'identité
+  - name: Admin
+    description: Fonctions d'administration (admin/operator uniquement)
+  - name: Webhooks
+    description: Endpoints pour intégrations externes
+  - name: Metrics
+    description: Métriques et monitoring
