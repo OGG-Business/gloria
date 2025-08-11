@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpp-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gpp-backend
+  template:
+    metadata:
+      labels:
+        app: gpp-backend
+    spec:
+      containers:
+        - name: backend
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8443
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gpp-secrets
+                  key: database_url
+            - name: OIDC_ISSUER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gpp-secrets
+                  key: oidc_issuer_url
+            - name: OIDC_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: gpp-secrets
+                  key: oidc_audience
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        - name: certs
+          secret:
+            secretName: gpp-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpp-backend
+spec:
+  selector:
+    app: gpp-backend
+  ports:
+    - name: https
+      port: {{ .Values.service.port }}
+      targetPort: 8443
+  type: {{ .Values.service.type }}

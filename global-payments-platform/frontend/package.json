@@ -1,0 +1,22 @@
+{
+  "name": "gpp-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4443 --https",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 4443 --https"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.31",
+    "@types/react-dom": "^18.2.14",
+    "typescript": "^5.5.4",
+    "vite": "^5.3.3"
+  }
+}

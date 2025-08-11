@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          pip install -U pip
+          pip install -e backend
+          pip install pytest pytest-cov black isort bandit safety
+      - name: Lint
+        run: |
+          black --check backend/app
+          isort --check-only backend/app
+      - name: Test
+        env:
+          DATABASE_URL: postgresql+psycopg://app:app@localhost:5432/app
+        run: |
+          echo "Skipping DB integration in CI sample"
+          pytest backend
+      - name: Security scan
+        run: |
+          bandit -r backend/app || true
+          safety check || true
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install and build
+        run: |
+          cd frontend
+          npm ci || npm install
+          npm run build
