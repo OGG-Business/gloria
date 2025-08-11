@@ -15,10 +15,21 @@ from app.notifications.routes import router as notifications_router
 from app.hooks.routes import router as hooks_router
 from app.admin.routes import router as admin_router
 
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+import os
+
 settings: Settings = get_settings()
 configure_logging()
 
 app = FastAPI(title="Global Payments Platform", version="0.1.0")
+
+@app.on_event("startup")
+async def run_migrations():
+    alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    alembic_command.upgrade(alembic_cfg, "head")
 
 # CORS for frontend dev
 app.add_middleware(
