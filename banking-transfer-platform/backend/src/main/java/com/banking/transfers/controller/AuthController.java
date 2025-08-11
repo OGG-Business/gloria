@@ -1,9 +1,7 @@
 package com.banking.transfers.controller;
 
-import com.banking.transfers.dto.auth.LoginRequest;
-import com.banking.transfers.dto.auth.LoginResponse;
+import com.banking.transfers.dto.*;
 import com.banking.transfers.service.AuthService;
-import com.banking.transfers.service.MfaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -14,14 +12,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.LockedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,397 +28,284 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/auth")
-@Tag(name = "Authentication", description = "Endpoints d'authentification et de gestion des utilisateurs")
+@Tag(name = "Authentification", description = "API d'authentification et de gestion des utilisateurs")
 @CrossOrigin(origins = "*", maxAge = 3600)
 public class AuthController {
 
     @Autowired
     private AuthService authService;
 
-    @Autowired
-    private MfaService mfaService;
-
     /**
      * Authentification d'un utilisateur
      */
     @PostMapping("/login")
-    @Operation(summary = "Authentification utilisateur", description = "Authentifie un utilisateur avec nom d'utilisateur/email et mot de passe")
+    @Operation(summary = "Authentification utilisateur", description = "Authentifie un utilisateur et retourne un token JWT")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Authentification réussie",
-            content = @Content(schema = @Schema(implementation = LoginResponse.class))),
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))),
         @ApiResponse(responseCode = "401", description = "Identifiants invalides"),
         @ApiResponse(responseCode = "423", description = "Compte verrouillé"),
-        @ApiResponse(responseCode = "400", description = "Données de requête invalides")
+        @ApiResponse(responseCode = "400", description = "Données invalides")
     })
-    public ResponseEntity<?> login(
+    public ResponseEntity<AuthResponse> login(
             @Valid @RequestBody LoginRequest loginRequest,
             HttpServletRequest request) {
         
-        try {
-            // Ajouter les informations client à la requête
-            loginRequest.setClientIp(getClientIpAddress(request));
-            loginRequest.setUserAgent(request.getHeader("User-Agent"));
-
-            LoginResponse response = authService.login(loginRequest);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("data", response);
-            result.put("message", "Authentification réussie");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (BadCredentialsException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Identifiants invalides");
-            error.put("error", "INVALID_CREDENTIALS");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
-            
-        } catch (LockedException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Compte verrouillé");
-            error.put("error", "ACCOUNT_LOCKED");
-            return ResponseEntity.status(HttpStatus.LOCKED).body(error);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de l'authentification");
-            error.put("error", "AUTHENTICATION_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        // Ajouter les informations client
+        loginRequest.setClientIp(getClientIpAddress(request));
+        loginRequest.setUserAgent(request.getHeader("User-Agent"));
+        
+        AuthResponse response = authService.authenticateUser(loginRequest);
+        return ResponseEntity.ok(response);
     }
 
     /**
-     * Déconnexion d'un utilisateur
+     * Enregistrement d'un nouvel utilisateur
      */
-    @PostMapping("/logout")
-    @Operation(summary = "Déconnexion utilisateur", description = "Déconnecte un utilisateur et invalide son token")
+    @PostMapping("/register")
+    @Operation(summary = "Enregistrement utilisateur", description = "Enregistre un nouvel utilisateur")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Déconnexion réussie"),
-        @ApiResponse(responseCode = "401", description = "Token invalide")
+        @ApiResponse(responseCode = "201", description = "Utilisateur créé avec succès",
+            content = @Content(schema = @Schema(implementation = UserRegistrationResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Données invalides ou utilisateur existant"),
+        @ApiResponse(responseCode = "409", description = "Utilisateur déjà existant")
     })
-    public ResponseEntity<?> logout(
-            @RequestHeader("Authorization") String authorization,
-            HttpServletRequest request) {
+    public ResponseEntity<UserRegistrationResponse> register(
+            @Valid @RequestBody UserRegistrationRequest registrationRequest) {
         
-        try {
-            authService.logout(authorization, getClientIpAddress(request), request.getHeader("User-Agent"));
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("message", "Déconnexion réussie");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de la déconnexion");
-            error.put("error", "LOGOUT_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        UserRegistrationResponse response = authService.registerUser(registrationRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
-     * Rafraîchissement d'un token d'accès
+     * Mise à jour du profil utilisateur
      */
-    @PostMapping("/refresh")
-    @Operation(summary = "Rafraîchissement de token", description = "Rafraîchit un token d'accès avec un refresh token")
+    @PutMapping("/profile")
+    @PreAuthorize("hasRole('USER')")
+    @Operation(summary = "Mise à jour profil", description = "Met à jour le profil de l'utilisateur connecté")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Token rafraîchi avec succès",
-            content = @Content(schema = @Schema(implementation = LoginResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Refresh token invalide")
+        @ApiResponse(responseCode = "200", description = "Profil mis à jour avec succès",
+            content = @Content(schema = @Schema(implementation = UserProfileResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Données invalides"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
     })
-    public ResponseEntity<?> refreshToken(
-            @RequestParam String refreshToken) {
+    public ResponseEntity<UserProfileResponse> updateProfile(
+            @Valid @RequestBody UserProfileUpdateRequest updateRequest,
+            @Parameter(description = "ID de l'utilisateur") @RequestParam UUID userId) {
         
-        try {
-            LoginResponse response = authService.refreshToken(refreshToken);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("data", response);
-            result.put("message", "Token rafraîchi avec succès");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (BadCredentialsException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Refresh token invalide");
-            error.put("error", "INVALID_REFRESH_TOKEN");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors du rafraîchissement du token");
-            error.put("error", "REFRESH_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
-    }
-
-    /**
-     * Validation d'un token d'accès
-     */
-    @GetMapping("/validate")
-    @Operation(summary = "Validation de token", description = "Valide un token d'accès")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Token valide"),
-        @ApiResponse(responseCode = "401", description = "Token invalide")
-    })
-    public ResponseEntity<?> validateToken(
-            @RequestHeader("Authorization") String authorization) {
-        
-        try {
-            boolean isValid = authService.validateToken(authorization);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("valid", isValid);
-            result.put("message", isValid ? "Token valide" : "Token invalide");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de la validation du token");
-            error.put("error", "VALIDATION_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        UserProfileResponse response = authService.updateUserProfile(userId, updateRequest);
+        return ResponseEntity.ok(response);
     }
 
     /**
      * Changement de mot de passe
      */
     @PostMapping("/change-password")
-    @Operation(summary = "Changement de mot de passe", description = "Change le mot de passe d'un utilisateur")
+    @PreAuthorize("hasRole('USER')")
+    @Operation(summary = "Changement mot de passe", description = "Change le mot de passe de l'utilisateur")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Mot de passe changé avec succès"),
-        @ApiResponse(responseCode = "401", description = "Mot de passe actuel incorrect"),
-        @ApiResponse(responseCode = "400", description = "Données de requête invalides")
+        @ApiResponse(responseCode = "400", description = "Ancien mot de passe incorrect"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
     })
-    public ResponseEntity<?> changePassword(
-            @RequestParam UUID userId,
-            @RequestParam String currentPassword,
-            @RequestParam String newPassword) {
+    public ResponseEntity<Void> changePassword(
+            @Valid @RequestBody PasswordChangeRequest changeRequest,
+            @Parameter(description = "ID de l'utilisateur") @RequestParam UUID userId) {
         
-        try {
-            authService.changePassword(userId, currentPassword, newPassword);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("message", "Mot de passe changé avec succès");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (BadCredentialsException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Mot de passe actuel incorrect");
-            error.put("error", "INVALID_CURRENT_PASSWORD");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
-            
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", e.getMessage());
-            error.put("error", "INVALID_PASSWORD");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors du changement de mot de passe");
-            error.put("error", "PASSWORD_CHANGE_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        authService.changePassword(userId, changeRequest);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Demande de réinitialisation de mot de passe
+     * Activation/désactivation MFA
      */
-    @PostMapping("/reset-password-request")
-    @Operation(summary = "Demande de réinitialisation", description = "Demande une réinitialisation de mot de passe")
+    @PostMapping("/mfa/toggle")
+    @PreAuthorize("hasRole('USER')")
+    @Operation(summary = "Toggle MFA", description = "Active ou désactive l'authentification à deux facteurs")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Demande envoyée avec succès"),
+        @ApiResponse(responseCode = "200", description = "MFA mis à jour avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
+    })
+    public ResponseEntity<Void> toggleMfa(
+            @Valid @RequestBody MfaToggleRequest toggleRequest,
+            @Parameter(description = "ID de l'utilisateur") @RequestParam UUID userId) {
+        
+        authService.toggleMfa(userId, toggleRequest);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Recherche d'utilisateurs (Admin)
+     */
+    @GetMapping("/users/search")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Recherche utilisateurs", description = "Recherche des utilisateurs avec pagination")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Recherche réussie",
+            content = @Content(schema = @Schema(implementation = Page.class))),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
+    })
+    public ResponseEntity<Page<UserProfileResponse>> searchUsers(
+            @Parameter(description = "Critères de recherche") UserSearchRequest searchRequest,
+            @Parameter(description = "Paramètres de pagination") Pageable pageable) {
+        
+        Page<UserProfileResponse> users = authService.searchUsers(searchRequest, pageable);
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Utilisateurs nécessitant une surveillance renforcée (Admin)
+     */
+    @GetMapping("/users/enhanced-due-diligence")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Utilisateurs à surveiller", description = "Liste des utilisateurs nécessitant une surveillance renforcée")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Liste récupérée avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
+    })
+    public ResponseEntity<List<UserProfileResponse>> getUsersRequiringEnhancedDueDiligence() {
+        List<UserProfileResponse> users = authService.findUsersRequiringEnhancedDueDiligence();
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Utilisateurs inactifs (Admin)
+     */
+    @GetMapping("/users/inactive")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Utilisateurs inactifs", description = "Liste des utilisateurs inactifs depuis une période donnée")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Liste récupérée avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
+    })
+    public ResponseEntity<List<UserProfileResponse>> getInactiveUsers(
+            @Parameter(description = "Date de coupure") @RequestParam LocalDateTime cutoffDate) {
+        
+        List<UserProfileResponse> users = authService.findInactiveUsers(cutoffDate);
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Statistiques des utilisateurs (Admin)
+     */
+    @GetMapping("/users/statistics")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Statistiques utilisateurs", description = "Obtient les statistiques des utilisateurs")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Statistiques récupérées avec succès",
+            content = @Content(schema = @Schema(implementation = UserStatisticsResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé")
+    })
+    public ResponseEntity<UserStatisticsResponse> getUserStatistics() {
+        UserStatisticsResponse statistics = authService.getUserStatistics();
+        return ResponseEntity.ok(statistics);
+    }
+
+    /**
+     * Déverrouillage d'un compte (Admin)
+     */
+    @PostMapping("/users/{userId}/unlock")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Déverrouiller compte", description = "Déverrouille un compte utilisateur")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Compte déverrouillé avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé"),
         @ApiResponse(responseCode = "404", description = "Utilisateur non trouvé")
     })
-    public ResponseEntity<?> resetPasswordRequest(
-            @RequestParam String email) {
+    public ResponseEntity<Void> unlockUserAccount(
+            @Parameter(description = "ID de l'utilisateur") @PathVariable UUID userId) {
         
-        try {
-            authService.resetPassword(email);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("message", "Email de réinitialisation envoyé");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de l'envoi de la demande de réinitialisation");
-            error.put("error", "RESET_REQUEST_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        authService.unlockUserAccount(userId);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Confirmation de réinitialisation de mot de passe
+     * Désactivation d'un compte (Admin)
      */
-    @PostMapping("/reset-password-confirm")
-    @Operation(summary = "Confirmation de réinitialisation", description = "Confirme la réinitialisation de mot de passe")
+    @PostMapping("/users/{userId}/deactivate")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Désactiver compte", description = "Désactive un compte utilisateur")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Mot de passe réinitialisé avec succès"),
-        @ApiResponse(responseCode = "401", description = "Token de réinitialisation invalide"),
-        @ApiResponse(responseCode = "400", description = "Données de requête invalides")
+        @ApiResponse(responseCode = "200", description = "Compte désactivé avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé"),
+        @ApiResponse(responseCode = "404", description = "Utilisateur non trouvé")
     })
-    public ResponseEntity<?> resetPasswordConfirm(
-            @RequestParam String resetToken,
-            @RequestParam String newPassword) {
+    public ResponseEntity<Void> deactivateUserAccount(
+            @Parameter(description = "ID de l'utilisateur") @PathVariable UUID userId) {
         
-        try {
-            authService.confirmPasswordReset(resetToken, newPassword);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("message", "Mot de passe réinitialisé avec succès");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (BadCredentialsException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Token de réinitialisation invalide");
-            error.put("error", "INVALID_RESET_TOKEN");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
-            
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", e.getMessage());
-            error.put("error", "INVALID_PASSWORD");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de la réinitialisation du mot de passe");
-            error.put("error", "PASSWORD_RESET_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        authService.deactivateUserAccount(userId);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Génération d'un code MFA de test
+     * Mise à jour du statut KYC (Admin)
      */
-    @GetMapping("/mfa/test-code")
-    @Operation(summary = "Code MFA de test", description = "Génère un code MFA de test pour un secret donné")
+    @PutMapping("/users/{userId}/kyc-status")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Mettre à jour KYC", description = "Met à jour le statut KYC d'un utilisateur")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Code généré avec succès"),
-        @ApiResponse(responseCode = "400", description = "Secret MFA invalide")
+        @ApiResponse(responseCode = "200", description = "Statut KYC mis à jour avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé"),
+        @ApiResponse(responseCode = "404", description = "Utilisateur non trouvé")
     })
-    public ResponseEntity<?> generateTestMfaCode(
-            @RequestParam String secret) {
+    public ResponseEntity<Void> updateKycStatus(
+            @Parameter(description = "ID de l'utilisateur") @PathVariable UUID userId,
+            @Parameter(description = "Nouveau statut KYC") @RequestParam String kycStatus,
+            @Parameter(description = "Raison du changement") @RequestParam(required = false) String reason) {
         
-        try {
-            String code = mfaService.generateTestCode(secret);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("code", code);
-            result.put("message", "Code MFA généré avec succès");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", e.getMessage());
-            error.put("error", "INVALID_MFA_SECRET");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de la génération du code MFA");
-            error.put("error", "MFA_GENERATION_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        // TODO: Convertir le string en enum KYCStatus
+        // authService.updateKycStatus(userId, KYCStatus.valueOf(kycStatus), reason);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Validation d'un code MFA
+     * Mise à jour du statut AML (Admin)
      */
-    @PostMapping("/mfa/validate")
-    @Operation(summary = "Validation MFA", description = "Valide un code MFA")
+    @PutMapping("/users/{userId}/aml-status")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Mettre à jour AML", description = "Met à jour le statut AML d'un utilisateur")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Code validé avec succès"),
-        @ApiResponse(responseCode = "401", description = "Code MFA invalide")
+        @ApiResponse(responseCode = "200", description = "Statut AML mis à jour avec succès"),
+        @ApiResponse(responseCode = "401", description = "Non authentifié"),
+        @ApiResponse(responseCode = "403", description = "Non autorisé"),
+        @ApiResponse(responseCode = "404", description = "Utilisateur non trouvé")
     })
-    public ResponseEntity<?> validateMfaCode(
-            @RequestParam String secret,
-            @RequestParam String code) {
+    public ResponseEntity<Void> updateAmlStatus(
+            @Parameter(description = "ID de l'utilisateur") @PathVariable UUID userId,
+            @Parameter(description = "Nouveau statut AML") @RequestParam String amlStatus,
+            @Parameter(description = "Raison du changement") @RequestParam(required = false) String reason) {
         
-        try {
-            boolean isValid = mfaService.validateMfaCode(secret, code);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("valid", isValid);
-            result.put("message", isValid ? "Code MFA valide" : "Code MFA invalide");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de la validation du code MFA");
-            error.put("error", "MFA_VALIDATION_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+        // TODO: Convertir le string en enum AMLStatus
+        // authService.updateAmlStatus(userId, AMLStatus.valueOf(amlStatus), reason);
+        return ResponseEntity.ok().build();
     }
 
     /**
-     * Génération d'une configuration MFA
+     * Vérification de la santé de l'API
      */
-    @GetMapping("/mfa/config")
-    @Operation(summary = "Configuration MFA", description = "Génère une configuration MFA complète pour un utilisateur")
+    @GetMapping("/health")
+    @Operation(summary = "Santé API", description = "Vérifie la santé de l'API d'authentification")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Configuration générée avec succès"),
-        @ApiResponse(responseCode = "400", description = "Paramètres invalides")
+        @ApiResponse(responseCode = "200", description = "API en bonne santé")
     })
-    public ResponseEntity<?> generateMfaConfig(
-            @RequestParam String username,
-            @RequestParam(defaultValue = "Banking Transfer Platform") String issuer) {
-        
-        try {
-            MfaService.MfaConfig config = mfaService.generateMfaConfig(username, issuer);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("data", config);
-            result.put("message", "Configuration MFA générée avec succès");
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("message", "Erreur lors de la génération de la configuration MFA");
-            error.put("error", "MFA_CONFIG_ERROR");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+    public ResponseEntity<String> health() {
+        return ResponseEntity.ok("Auth API is healthy");
     }
 
+    // Méthodes utilitaires privées
+
     /**
-     * Obtient l'adresse IP du client
+     * Extrait l'adresse IP du client depuis la requête HTTP
      */
     private String getClientIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");

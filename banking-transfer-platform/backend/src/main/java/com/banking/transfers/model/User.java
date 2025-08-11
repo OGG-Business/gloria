@@ -17,6 +17,7 @@ import java.util.UUID;
 @Table(name = "users", indexes = {
     @Index(name = "idx_user_username", columnList = "username"),
     @Index(name = "idx_user_email", columnList = "email"),
+    @Index(name = "idx_user_id_number", columnList = "id_number"),
     @Index(name = "idx_user_kyc_status", columnList = "kyc_status"),
     @Index(name = "idx_user_aml_status", columnList = "aml_status"),
     @Index(name = "idx_user_created_at", columnList = "created_at")
@@ -29,16 +30,16 @@ public class User {
 
     @Column(name = "username", unique = true, nullable = false, length = 50)
     @NotBlank(message = "Le nom d'utilisateur est obligatoire")
-    @Pattern(regexp = "^[a-zA-Z0-9_]{3,50}$", message = "Le nom d'utilisateur doit contenir entre 3 et 50 caractères alphanumériques et underscores")
+    @Pattern(regexp = "^[a-zA-Z0-9_]{3,50}$", message = "Le nom d'utilisateur doit contenir 3 à 50 caractères alphanumériques et underscores")
     private String username;
 
     @Column(name = "email", unique = true, nullable = false, length = 100)
     @NotBlank(message = "L'email est obligatoire")
-    @Email(message = "L'email doit être valide")
+    @Email(message = "Format d'email invalide")
     private String email;
 
     @Column(name = "password_hash", nullable = false)
-    @NotBlank(message = "Le mot de passe est obligatoire")
+    @NotBlank(message = "Le hash du mot de passe est obligatoire")
     private String passwordHash;
 
     @Column(name = "first_name", nullable = false, length = 50)
@@ -52,7 +53,7 @@ public class User {
     private String lastName;
 
     @Column(name = "phone", length = 20)
-    @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Le numéro de téléphone doit être valide")
+    @Pattern(regexp = "^\\+?[1-9]\\d{1,14}$", message = "Format de téléphone invalide")
     private String phone;
 
     @Column(name = "date_of_birth")
@@ -60,7 +61,7 @@ public class User {
     private LocalDate dateOfBirth;
 
     @Column(name = "nationality", length = 2)
-    @Pattern(regexp = "^[A-Z]{2}$", message = "La nationalité doit être un code pays ISO 3166-1 alpha-2")
+    @Pattern(regexp = "^[A-Z]{2}$", message = "Le code de nationalité doit être un code ISO 3166-1 alpha-2")
     private String nationality;
 
     @Column(name = "id_number", length = 50)
@@ -70,18 +71,38 @@ public class User {
     @Enumerated(EnumType.STRING)
     private IdType idType;
 
-    @Column(name = "address", length = 500)
-    private String address;
+    @Column(name = "address_line1", length = 100)
+    private String addressLine1;
 
-    @Column(name = "city", length = 100)
+    @Column(name = "address_line2", length = 100)
+    private String addressLine2;
+
+    @Column(name = "city", length = 50)
     private String city;
 
-    @Column(name = "country", length = 2)
-    @Pattern(regexp = "^[A-Z]{2}$", message = "Le pays doit être un code pays ISO 3166-1 alpha-2")
-    private String country;
+    @Column(name = "state", length = 50)
+    private String state;
 
     @Column(name = "postal_code", length = 20)
     private String postalCode;
+
+    @Column(name = "country", length = 2)
+    @Pattern(regexp = "^[A-Z]{2}$", message = "Le code pays doit être un code ISO 3166-1 alpha-2")
+    private String country;
+
+    @Column(name = "occupation", length = 100)
+    private String occupation;
+
+    @Column(name = "employer", length = 100)
+    private String employer;
+
+    @Column(name = "annual_income")
+    @DecimalMin(value = "0.0", message = "Le revenu annuel ne peut pas être négatif")
+    private Double annualIncome;
+
+    @Column(name = "source_of_funds", length = 50)
+    @Enumerated(EnumType.STRING)
+    private SourceOfFunds sourceOfFunds;
 
     @Column(name = "kyc_status", nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
@@ -93,6 +114,10 @@ public class User {
 
     @Column(name = "risk_score", nullable = false)
     private Integer riskScore = 0;
+
+    @Column(name = "risk_level", length = 20)
+    @Enumerated(EnumType.STRING)
+    private RiskLevel riskLevel = RiskLevel.LOW;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
@@ -116,7 +141,6 @@ public class User {
     private String mfaSecret;
 
     @Column(name = "preferred_language", length = 5)
-    @Pattern(regexp = "^[a-z]{2}(-[A-Z]{2})?$", message = "La langue doit être un code ISO 639-1")
     private String preferredLanguage = "fr";
 
     @Column(name = "timezone", length = 50)
@@ -236,12 +260,20 @@ public class User {
         this.idType = idType;
     }
 
-    public String getAddress() {
-        return address;
+    public String getAddressLine1() {
+        return addressLine1;
     }
 
-    public void setAddress(String address) {
-        this.address = address;
+    public void setAddressLine1(String addressLine1) {
+        this.addressLine1 = addressLine1;
+    }
+
+    public String getAddressLine2() {
+        return addressLine2;
+    }
+
+    public void setAddressLine2(String addressLine2) {
+        this.addressLine2 = addressLine2;
     }
 
     public String getCity() {
@@ -252,12 +284,12 @@ public class User {
         this.city = city;
     }
 
-    public String getCountry() {
-        return country;
+    public String getState() {
+        return state;
     }
 
-    public void setCountry(String country) {
-        this.country = country;
+    public void setState(String state) {
+        this.state = state;
     }
 
     public String getPostalCode() {
@@ -266,6 +298,46 @@ public class User {
 
     public void setPostalCode(String postalCode) {
         this.postalCode = postalCode;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getOccupation() {
+        return occupation;
+    }
+
+    public void setOccupation(String occupation) {
+        this.occupation = occupation;
+    }
+
+    public String getEmployer() {
+        return employer;
+    }
+
+    public void setEmployer(String employer) {
+        this.employer = employer;
+    }
+
+    public Double getAnnualIncome() {
+        return annualIncome;
+    }
+
+    public void setAnnualIncome(Double annualIncome) {
+        this.annualIncome = annualIncome;
+    }
+
+    public SourceOfFunds getSourceOfFunds() {
+        return sourceOfFunds;
+    }
+
+    public void setSourceOfFunds(SourceOfFunds sourceOfFunds) {
+        this.sourceOfFunds = sourceOfFunds;
     }
 
     public KYCStatus getKycStatus() {
@@ -290,6 +362,14 @@ public class User {
 
     public void setRiskScore(Integer riskScore) {
         this.riskScore = riskScore;
+    }
+
+    public RiskLevel getRiskLevel() {
+        return riskLevel;
+    }
+
+    public void setRiskLevel(RiskLevel riskLevel) {
+        this.riskLevel = riskLevel;
     }
 
     public Boolean getIsActive() {
@@ -421,25 +501,12 @@ public class User {
         this.isLocked = false;
     }
 
-    public void updateLastLogin() {
-        this.lastLoginDate = LocalDateTime.now();
-        this.failedLoginAttempts = 0;
-    }
-
-    public boolean isKycVerified() {
-        return kycStatus == KYCStatus.VERIFIED;
-    }
-
-    public boolean isAmlPassed() {
-        return amlStatus == AMLStatus.PASSED;
-    }
-
     public boolean isHighRisk() {
-        return riskScore >= 70;
+        return riskLevel == RiskLevel.HIGH || riskLevel == RiskLevel.CRITICAL;
     }
 
-    public boolean requiresMfa() {
-        return mfaEnabled && mfaSecret != null;
+    public boolean requiresEnhancedDueDiligence() {
+        return isHighRisk() || kycStatus == KYCStatus.PENDING || amlStatus == AMLStatus.PENDING_CLARIFICATION;
     }
 
     @Override
@@ -455,18 +522,5 @@ public class User {
                 ", isActive=" + isActive +
                 ", isLocked=" + isLocked +
                 '}';
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        User user = (User) o;
-        return id != null && id.equals(user.getId());
-    }
-
-    @Override
-    public int hashCode() {
-        return id != null ? id.hashCode() : 0;
     }
 }

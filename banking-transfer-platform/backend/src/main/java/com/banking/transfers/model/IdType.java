@@ -8,12 +8,12 @@ public enum IdType {
     NATIONAL_ID("NATIONAL_ID", "Carte d'identité nationale"),
     DRIVERS_LICENSE("DRIVERS_LICENSE", "Permis de conduire"),
     RESIDENCE_PERMIT("RESIDENCE_PERMIT", "Permis de séjour"),
-    BIRTH_CERTIFICATE("BIRTH_CERTIFICATE", "Acte de naissance"),
     MILITARY_ID("MILITARY_ID", "Carte militaire"),
     STUDENT_ID("STUDENT_ID", "Carte d'étudiant"),
     WORK_PERMIT("WORK_PERMIT", "Permis de travail"),
     REFUGEE_ID("REFUGEE_ID", "Carte de réfugié"),
-    DIPLOMATIC_ID("DIPLOMATIC_ID", "Carte diplomatique"),
+    BIRTH_CERTIFICATE("BIRTH_CERTIFICATE", "Acte de naissance"),
+    MARRIAGE_CERTIFICATE("MARRIAGE_CERTIFICATE", "Acte de mariage"),
     OTHER("OTHER", "Autre");
 
     private final String code;
@@ -38,29 +38,17 @@ public enum IdType {
                 return idType;
             }
         }
-        throw new IllegalArgumentException("Code d'identité invalide: " + code);
-    }
-
-    public static IdType fromCodeOrDefault(String code, IdType defaultValue) {
-        try {
-            return fromCode(code);
-        } catch (IllegalArgumentException e) {
-            return defaultValue;
-        }
+        throw new IllegalArgumentException("Type d'identité inconnu: " + code);
     }
 
     public boolean isGovernmentIssued() {
         return this == PASSPORT || this == NATIONAL_ID || this == DRIVERS_LICENSE || 
                this == RESIDENCE_PERMIT || this == MILITARY_ID || this == WORK_PERMIT || 
-               this == REFUGEE_ID || this == DIPLOMATIC_ID;
+               this == REFUGEE_ID;
     }
 
     public boolean isPrimaryId() {
         return this == PASSPORT || this == NATIONAL_ID;
-    }
-
-    public boolean isSecondaryId() {
-        return this == DRIVERS_LICENSE || this == RESIDENCE_PERMIT || this == MILITARY_ID;
     }
 
     @Override
