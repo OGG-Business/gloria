@@ -31,19 +31,16 @@ async def run_migrations():
     alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
     alembic_command.upgrade(alembic_cfg, "head")
 
-# CORS for frontend dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://localhost:4443", "http://localhost:4443"],
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.add_middleware(CorrelationIdMiddleware)
 
-# Routers
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(accounts_router, prefix="/accounts", tags=["accounts"])
 app.include_router(transfers_router, prefix="/transfers", tags=["transfers"])

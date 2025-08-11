@@ -50,45 +50,47 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
+    <div className="container">
       <h1>Global Payments Platform</h1>
-      <section>
+      <section className="card">
         <h2>Auth</h2>
-        <input style={{ width: '100%' }} placeholder="Paste Bearer token (Keycloak)" value={token} onChange={e => setToken(e.target.value)} />
+        <input className="input" style={{ width: '100%' }} placeholder="Paste Bearer token (Keycloak)" value={token} onChange={e => setToken(e.target.value)} />
       </section>
-      <section>
+      <section className="card">
         <h2>Initiate transfer</h2>
-        <div>
-          <label>Debtor account</label>
-          <select value={selectedAccount ?? ''} onChange={e => setSelectedAccount(parseInt(e.target.value))}>
-            <option value="">Select</option>
-            {accounts.map(a => <option key={a.id} value={a.id}>{a.display_name} - {a.iban}</option>)}
-          </select>
-        </div>
-        <div>
-          <label>Creditor IBAN</label>
-          <input value={creditorIban} onChange={e => setCreditorIban(e.target.value)} />
-        </div>
-        <div>
-          <label>Creditor BIC</label>
-          <input value={creditorBic} onChange={e => setCreditorBic(e.target.value)} />
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input style={{ width: 120 }} value={amount} onChange={e => setAmount(e.target.value)} />
-          <input style={{ width: 80 }} value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} />
-          <input style={{ flex: 1 }} value={reference} onChange={e => setReference(e.target.value)} />
-        </div>
-        <label><input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} /> Dry run</label>
-        <div>
-          <button onClick={createTransfer}>Submit</button>
+        <div className="grid grid-2">
+          <div>
+            <label>Debtor account</label>
+            <select className="input" value={selectedAccount ?? ''} onChange={e => setSelectedAccount(parseInt(e.target.value))}>
+              <option value="">Select</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.display_name} - {a.iban}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Creditor IBAN</label>
+            <input className="input" value={creditorIban} onChange={e => setCreditorIban(e.target.value)} />
+          </div>
+          <div>
+            <label>Creditor BIC</label>
+            <input className="input" value={creditorBic} onChange={e => setCreditorBic(e.target.value)} />
+          </div>
+          <div className="grid grid-3">
+            <input className="input" value={amount} onChange={e => setAmount(e.target.value)} />
+            <input className="input" value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} />
+            <input className="input" value={reference} onChange={e => setReference(e.target.value)} />
+          </div>
+          <label><input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} /> Dry run</label>
+          <div>
+            <button className="btn" onClick={createTransfer}>Submit</button>
+          </div>
         </div>
       </section>
-      <section>
+      <section className="card">
         <h2>Transfers</h2>
         {transfers.map(t => (
-          <div key={t.id} style={{ border: '1px solid #ddd', padding: 8, marginBottom: 8 }}>
+          <div key={t.id} className="card">
             <div>ID {t.id} — {t.status} — {t.reference}</div>
-            <button onClick={() => loadEvents(t.id)}>Load timeline</button>
+            <button className="btn" onClick={() => loadEvents(t.id)}>Load timeline</button>
             <ul>
               {(events[t.id]||[]).map(ev => <li key={ev.id}>{ev.type} — {ev.payload}</li>)}
             </ul>

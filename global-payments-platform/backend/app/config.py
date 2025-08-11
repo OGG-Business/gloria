@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings
+from typing import List
 
 class Settings(BaseSettings):
     # App
@@ -9,6 +10,9 @@ class Settings(BaseSettings):
     # TLS
     tls_cert_path: str = "/certs/dev-cert.pem"
     tls_key_path: str = "/certs/dev-key.pem"
+
+    # CORS
+    cors_allowed_origins: List[str] = ["https://localhost:4443", "http://localhost:4443"]
 
     # Database
     database_url: str = "postgresql+psycopg://app:app@db:5432/app"
