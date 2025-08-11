@@ -1,0 +1,20 @@
+apiVersion: v2
+name: swiftpay
+description: A Helm chart for SwiftPay - Global Bank Transfer Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/swiftpay/swiftpay
+sources:
+  - https://github.com/swiftpay/swiftpay
+maintainers:
+  - name: SwiftPay Team
+    email: dev@swiftpay.local
+keywords:
+  - banking
+  - payments
+  - swift
+  - iso20022
+  - transfers
+annotations:
+  category: Financial Services

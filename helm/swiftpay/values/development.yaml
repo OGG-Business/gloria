@@ -1,0 +1,94 @@
+# SwiftPay Development Helm Values
+
+global:
+  environment: development
+  domain: swiftpay.local
+  
+replicaCount: 1
+
+image:
+  repository: swiftpay/backend
+  tag: develop
+  pullPolicy: Always
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: swiftpay/frontend
+    tag: develop
+    pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 8080
+  managementPort: 8081
+
+frontend:
+  service:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: api-dev.swiftpay.local
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: app-dev.swiftpay.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+
+# Use local services for development
+database:
+  enabled: true
+  host: swiftpay-postgres
+  port: 5432
+  name: swiftpay_dev
+  username: swiftpay_user
+  
+redis:
+  enabled: true
+  host: swiftpay-redis
+  port: 6379
+
+vault:
+  enabled: true
+  url: http://swiftpay-vault:8200
+
+# Storage configuration for development
+storage:
+  kycStorageClass: standard
+  logsStorageClass: standard
+
+# Monitoring (optional in dev)
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+  grafana:
+    enabled: false
+
+# Security (relaxed for development)
+security:
+  podSecurityPolicy:
+    enabled: false
+  networkPolicy:
+    enabled: false

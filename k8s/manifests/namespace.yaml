@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: swiftpay-prod
+  labels:
+    name: swiftpay-prod
+    environment: production
+    app.kubernetes.io/name: swiftpay
+    app.kubernetes.io/part-of: swiftpay
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: swiftpay-dev
+  labels:
+    name: swiftpay-dev
+    environment: development
+    app.kubernetes.io/name: swiftpay
+    app.kubernetes.io/part-of: swiftpay

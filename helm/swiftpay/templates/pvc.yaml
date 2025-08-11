@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: swiftpay-kyc-storage
+  labels:
+    {{- include "swiftpay.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: {{ .Values.storage.kycStorageClass | default "standard" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: swiftpay-logs
+  labels:
+    {{- include "swiftpay.labels" . | nindent 4 }}
+    app.kubernetes.io/component: logs
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: {{ .Values.storage.logsStorageClass | default "standard" }}

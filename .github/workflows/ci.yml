@@ -1,0 +1,339 @@
+name: SwiftPay CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}/backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}/frontend
+
+jobs:
+  # Backend Tests and Security Scans
+  backend-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: swiftpay_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Cache Maven dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+
+    - name: Run backend tests
+      working-directory: ./backend
+      run: |
+        ./mvnw clean test -Dspring.profiles.active=test
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_NAME: swiftpay_test
+        DB_USERNAME: postgres
+        DB_PASSWORD: test
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
+
+    - name: Generate test coverage report
+      working-directory: ./backend
+      run: ./mvnw jacoco:report
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/target/site/jacoco/jacoco.xml
+        flags: backend
+
+    - name: Run OWASP Dependency Check
+      working-directory: ./backend
+      run: ./mvnw org.owasp:dependency-check-maven:check
+
+    - name: Run SpotBugs Security Analysis
+      working-directory: ./backend
+      run: ./mvnw spotbugs:check
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          backend/target/dependency-check-report.html
+          backend/target/spotbugsXml.xml
+
+  # Frontend Tests and Linting
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Run ESLint
+      working-directory: ./frontend
+      run: npm run lint
+
+    - name: Run Prettier check
+      working-directory: ./frontend
+      run: npm run format:check
+
+    - name: Run frontend tests
+      working-directory: ./frontend
+      run: npm run test:coverage
+
+    - name: Upload frontend coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+
+  # Security Scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run Snyk to check for vulnerabilities
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --all-projects --severity-threshold=high
+
+  # Build and Push Docker Images
+  build-images:
+    needs: [backend-test, frontend-test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'release'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata for backend
+      id: meta-backend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Extract metadata for frontend
+      id: meta-frontend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: true
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Deploy to Development
+  deploy-dev:
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBECONFIG_DEV }}
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Deploy to development
+      run: |
+        helm upgrade --install swiftpay-dev ./helm/swiftpay \
+          --namespace swiftpay-dev \
+          --create-namespace \
+          --set global.environment=development \
+          --set image.tag=${{ github.sha }} \
+          --set frontend.image.tag=${{ github.sha }} \
+          --values ./helm/swiftpay/values/development.yaml \
+          --wait \
+          --timeout=10m
+
+    - name: Run smoke tests
+      run: |
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=swiftpay -n swiftpay-dev --timeout=300s
+        kubectl exec -n swiftpay-dev deployment/swiftpay-dev-backend -- curl -f http://localhost:8081/actuator/health
+
+  # Deploy to Production
+  deploy-prod:
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBECONFIG_PROD }}
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Deploy to production
+      run: |
+        helm upgrade --install swiftpay ./helm/swiftpay \
+          --namespace swiftpay-prod \
+          --create-namespace \
+          --set global.environment=production \
+          --set image.tag=${{ github.event.release.tag_name }} \
+          --set frontend.image.tag=${{ github.event.release.tag_name }} \
+          --values ./helm/swiftpay/values/production.yaml \
+          --wait \
+          --timeout=15m
+
+    - name: Run production health checks
+      run: |
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=swiftpay -n swiftpay-prod --timeout=600s
+        kubectl exec -n swiftpay-prod deployment/swiftpay-backend -- curl -f http://localhost:8081/actuator/health
+
+    - name: Notify deployment success
+      if: success()
+      run: |
+        echo "🚀 SwiftPay ${{ github.event.release.tag_name }} deployed successfully to production!"
+
+  # Nightly Security Scan
+  nightly-security:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run comprehensive security scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+
+    - name: Scan Docker images
+      run: |
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:main
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:main
+        trivy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:main
+        trivy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:main

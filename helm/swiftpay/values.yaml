@@ -1,0 +1,122 @@
+# Default values for SwiftPay
+# This is a YAML-formatted file.
+
+global:
+  environment: development
+  domain: swiftpay.local
+
+replicaCount: 1
+
+image:
+  repository: swiftpay/backend
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: swiftpay/frontend
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+  managementPort: 8081
+
+frontend:
+  service:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: api.swiftpay.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Database configuration
+database:
+  enabled: true
+  type: postgresql
+  host: swiftpay-postgres
+  port: 5432
+  name: swiftpay
+  username: swiftpay_user
+  
+# Redis configuration  
+redis:
+  enabled: true
+  host: swiftpay-redis
+  port: 6379
+
+# Vault configuration
+vault:
+  enabled: true
+  url: http://swiftpay-vault:8200
+
+# Monitoring
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+  grafana:
+    enabled: false
+
+# Security
+security:
+  podSecurityPolicy:
+    enabled: false
+  networkPolicy:
+    enabled: false
