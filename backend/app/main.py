@@ -92,7 +92,15 @@ async def root():
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "endpoints": {
+            "auth": "/auth",
+            "accounts": "/accounts", 
+            "transfers": "/transfers",
+            "kyc": "/kyc",
+            "notifications": "/notifications",
+            "admin": "/admin"
+        }
     }
 
 # Health check endpoint
@@ -107,7 +115,8 @@ async def health_check():
         return {
             "status": "healthy",
             "database": "connected",
-            "timestamp": "2024-01-01T00:00:00Z"
+            "timestamp": "2024-01-01T00:00:00Z",
+            "version": "1.0.0"
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")

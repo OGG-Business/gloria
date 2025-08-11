@@ -1,4 +1,8 @@
 from fastapi import APIRouter
 router = APIRouter()
-@router.get('/test')
-def test(): return {'message': 'KYC working'}
+@router.get("/")
+def get_kyc_info():
+    return {"message": "KYC module", "endpoints": ["/upload", "/verify", "/status"]}
+@router.post("/upload")
+def upload_document():
+    return {"message": "Document uploaded", "status": "processing"}
