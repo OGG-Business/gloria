@@ -1,5 +1,4 @@
-from fastapi import APIRouter, HTTPException
-from typing import List
+from fastapi import APIRouter
 router = APIRouter()
 @router.get("/")
 def get_auth_info():
