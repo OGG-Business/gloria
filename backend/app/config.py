@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     oidc_audience: Optional[str] = None
 
     database_url: str = Field(default="postgresql://postgres:postgres@db:5432/transfers")
+    use_db: bool = Field(default=False)
 
     encryption_key_hex: Optional[str] = None  # 32 bytes hex for AES-256
 
@@ -33,6 +34,9 @@ class Settings(BaseSettings):
 
     # Mode
     dry_run: bool = Field(default=True)
+
+    # Cloud SQL (for Cloud Run)
+    db_instance_connection_name: Optional[str] = None
 
     class Config:
         env_prefix = "APP_"

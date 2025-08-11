@@ -5,6 +5,8 @@ from starlette.responses import Response
 
 from .services.logging import configure_logging, with_request_id
 from .routers import accounts, transfers, kyc, admin, hooks, auth_router, notifications
+from .config import settings
+from .db import get_engine
 
 configure_logging()
 
@@ -20,6 +22,12 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def startup():
+    if settings.use_db:
+        get_engine()
+
+
 @app.middleware("http")
 async def add_request_id_and_logging(request: Request, call_next):
     response = await with_request_id(request, call_next)
@@ -28,7 +36,7 @@ async def add_request_id_and_logging(request: Request, call_next):
 
 @app.get("/health", tags=["ops"])  # simple health check
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "db": bool(settings.use_db)}
 
 
 @app.get("/metrics")

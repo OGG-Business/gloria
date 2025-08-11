@@ -1,0 +1,48 @@
+swagger: '2.0'
+info:
+  title: OpenBank Transfers Platform
+  version: '1.0.0'
+host: YOUR_PROJECT.appspot.com
+schemes:
+  - https
+x-google-endpoints:
+  - name: YOUR_PROJECT.appspot.com
+    allowCors: true
+x-google-backend:
+  address: https://openbank-backend-xxxxxxxx-uc.a.run.app
+securityDefinitions:
+  google_jwt:
+    authorizationUrl: ""
+    flow: "implicit"
+    type: "oauth2"
+    x-google-issuer: "https://accounts.google.com"
+    x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
+    x-google-audiences: "YOUR_CLIENT_ID"
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: OK
+  /transfers:
+    post:
+      operationId: createTransfer
+      security:
+        - google_jwt: []
+      responses:
+        '200':
+          description: OK
+  /transfers/{id}/events:
+    get:
+      operationId: getTransferEvents
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+      security:
+        - google_jwt: []
+      responses:
+        '200':
+          description: OK

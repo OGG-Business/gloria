@@ -1,0 +1,32 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: openbank-backend
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containers:
+        - image: gcr.io/YOUR_PROJECT/openbank-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_APP_ENV
+              value: prod
+            - name: APP_AUTH_DISABLED
+              value: "false"
+            - name: APP_USE_DB
+              value: "true"
+            - name: APP_DATABASE_URL
+              value: postgresql://USER:PASSWORD@localhost:5432/transfers
+            - name: APP_DRY_RUN
+              value: "true"
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+      timeoutSeconds: 60
