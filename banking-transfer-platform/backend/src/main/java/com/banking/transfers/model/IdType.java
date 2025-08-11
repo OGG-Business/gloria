@@ -11,11 +11,7 @@ public enum IdType {
     BIRTH_CERTIFICATE("BIRTH_CERTIFICATE", "Acte de naissance"),
     MILITARY_ID("MILITARY_ID", "Carte militaire"),
     STUDENT_ID("STUDENT_ID", "Carte d'étudiant"),
-    EMPLOYEE_ID("EMPLOYEE_ID", "Carte d'employé"),
-    BUSINESS_LICENSE("BUSINESS_LICENSE", "Licence commerciale"),
-    TAX_ID("TAX_ID", "Numéro d'identification fiscale"),
-    SOCIAL_SECURITY("SOCIAL_SECURITY", "Numéro de sécurité sociale"),
-    VOTER_ID("VOTER_ID", "Carte d'électeur"),
+    WORK_PERMIT("WORK_PERMIT", "Permis de travail"),
     REFUGEE_ID("REFUGEE_ID", "Carte de réfugié"),
     DIPLOMATIC_ID("DIPLOMATIC_ID", "Carte diplomatique"),
     OTHER("OTHER", "Autre");
@@ -42,20 +38,17 @@ public enum IdType {
                 return idType;
             }
         }
-        throw new IllegalArgumentException("Code d'identité invalide: " + code);
+        throw new IllegalArgumentException("Type d'identité inconnu: " + code);
     }
 
     public boolean isGovernmentIssued() {
         return this == PASSPORT || this == NATIONAL_ID || this == DRIVERS_LICENSE || 
-               this == RESIDENCE_PERMIT || this == MILITARY_ID || this == DIPLOMATIC_ID;
+               this == RESIDENCE_PERMIT || this == MILITARY_ID || this == WORK_PERMIT || 
+               this == REFUGEE_ID || this == DIPLOMATIC_ID;
     }
 
     public boolean isPrimaryId() {
         return this == PASSPORT || this == NATIONAL_ID;
-    }
-
-    public boolean isSecondaryId() {
-        return this == DRIVERS_LICENSE || this == RESIDENCE_PERMIT || this == MILITARY_ID;
     }
 
     @Override

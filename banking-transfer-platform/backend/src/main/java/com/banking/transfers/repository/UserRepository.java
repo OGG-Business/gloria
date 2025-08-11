@@ -16,244 +16,216 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Repository pour l'entité User
+ * Repository pour la gestion des utilisateurs
  */
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
-    
+
     /**
-     * Trouver un utilisateur par son nom d'utilisateur
+     * Trouve un utilisateur par son nom d'utilisateur
      */
     Optional<User> findByUsername(String username);
-    
+
     /**
-     * Trouver un utilisateur par son email
+     * Trouve un utilisateur par son email
      */
     Optional<User> findByEmail(String email);
-    
+
     /**
-     * Vérifier si un nom d'utilisateur existe
+     * Trouve un utilisateur par son nom d'utilisateur ou email
      */
-    boolean existsByUsername(String username);
-    
+    @Query("SELECT u FROM User u WHERE u.username = :identifier OR u.email = :identifier")
+    Optional<User> findByUsernameOrEmail(@Param("identifier") String identifier);
+
     /**
-     * Vérifier si un email existe
+     * Trouve un utilisateur par son numéro d'identité
      */
-    boolean existsByEmail(String email);
-    
+    Optional<User> findByIdNumber(String idNumber);
+
     /**
-     * Trouver des utilisateurs par statut KYC
-     */
-    List<User> findByKycStatus(KYCStatus kycStatus);
-    
-    /**
-     * Trouver des utilisateurs par statut AML
-     */
-    List<User> findByAmlStatus(AMLStatus amlStatus);
-    
-    /**
-     * Trouver des utilisateurs actifs
+     * Trouve tous les utilisateurs actifs
      */
     List<User> findByIsActiveTrue();
-    
+
     /**
-     * Trouver des utilisateurs verrouillés
+     * Trouve tous les utilisateurs verrouillés
      */
     List<User> findByIsLockedTrue();
-    
+
     /**
-     * Trouver des utilisateurs avec MFA activé
+     * Trouve les utilisateurs par statut KYC
      */
-    List<User> findByMfaEnabledTrue();
-    
+    List<User> findByKycStatus(KYCStatus kycStatus);
+
     /**
-     * Trouver des utilisateurs par nationalité
+     * Trouve les utilisateurs par statut AML
+     */
+    List<User> findByAmlStatus(AMLStatus amlStatus);
+
+    /**
+     * Trouve les utilisateurs avec un score de risque supérieur ou égal à la valeur donnée
+     */
+    List<User> findByRiskScoreGreaterThanEqual(Integer riskScore);
+
+    /**
+     * Trouve les utilisateurs par nationalité
      */
     List<User> findByNationality(String nationality);
-    
+
     /**
-     * Trouver des utilisateurs par pays
+     * Trouve les utilisateurs par pays
      */
     List<User> findByCountry(String country);
-    
+
     /**
-     * Trouver des utilisateurs avec un score de risque élevé
-     */
-    @Query("SELECT u FROM User u WHERE u.riskScore >= :minRiskScore")
-    List<User> findByRiskScoreGreaterThanEqual(@Param("minRiskScore") Integer minRiskScore);
-    
-    /**
-     * Trouver des utilisateurs créés après une date
+     * Trouve les utilisateurs créés après une date donnée
      */
     List<User> findByCreatedAtAfter(LocalDateTime date);
-    
+
     /**
-     * Trouver des utilisateurs créés entre deux dates
+     * Trouve les utilisateurs créés entre deux dates
      */
     List<User> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
-    
+
     /**
-     * Trouver des utilisateurs qui se sont connectés après une date
+     * Trouve les utilisateurs qui se sont connectés après une date donnée
      */
     List<User> findByLastLoginDateAfter(LocalDateTime date);
-    
+
     /**
-     * Trouver des utilisateurs qui ne se sont jamais connectés
+     * Trouve les utilisateurs avec MFA activé
      */
-    List<User> findByLastLoginDateIsNull();
-    
+    List<User> findByMfaEnabledTrue();
+
     /**
-     * Trouver des utilisateurs avec des tentatives de connexion échouées
+     * Trouve les utilisateurs avec un nombre de tentatives de connexion échouées supérieur ou égal à la valeur donnée
      */
-    @Query("SELECT u FROM User u WHERE u.failedLoginAttempts > 0")
-    List<User> findUsersWithFailedLoginAttempts();
-    
+    List<User> findByFailedLoginAttemptsGreaterThanEqual(Integer attempts);
+
     /**
-     * Trouver des utilisateurs avec des tentatives de connexion échouées supérieures à un seuil
+     * Trouve les utilisateurs par type de document d'identité
      */
-    @Query("SELECT u FROM User u WHERE u.failedLoginAttempts >= :threshold")
-    List<User> findUsersWithFailedLoginAttemptsAbove(@Param("threshold") Integer threshold);
-    
+    List<User> findByIdType(com.banking.transfers.model.IdType idType);
+
     /**
-     * Recherche d'utilisateurs par nom ou email (recherche partielle)
+     * Vérifie si un nom d'utilisateur existe
      */
-    @Query("SELECT u FROM User u WHERE " +
-           "LOWER(u.firstName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-           "LOWER(u.lastName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-           "LOWER(u.username) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-           "LOWER(u.email) LIKE LOWER(CONCAT('%', :searchTerm, '%'))")
-    Page<User> searchUsers(@Param("searchTerm") String searchTerm, Pageable pageable);
-    
+    boolean existsByUsername(String username);
+
     /**
-     * Trouver des utilisateurs par type de document d'identité
+     * Vérifie si un email existe
      */
-    @Query("SELECT u FROM User u WHERE u.idType = :idType")
-    List<User> findByIdType(@Param("idType") String idType);
-    
+    boolean existsByEmail(String email);
+
     /**
-     * Trouver des utilisateurs avec des documents d'identité expirés ou manquants
+     * Vérifie si un numéro d'identité existe
      */
-    @Query("SELECT u FROM User u WHERE u.idNumber IS NULL OR u.idType IS NULL")
-    List<User> findUsersWithMissingIdDocuments();
-    
+    boolean existsByIdNumber(String idNumber);
+
     /**
-     * Compter les utilisateurs par statut KYC
+     * Trouve les utilisateurs par nom ou prénom (recherche insensible à la casse)
      */
-    @Query("SELECT u.kycStatus, COUNT(u) FROM User u GROUP BY u.kycStatus")
-    List<Object[]> countUsersByKycStatus();
-    
+    @Query("SELECT u FROM User u WHERE LOWER(u.firstName) LIKE LOWER(CONCAT('%', :name, '%')) OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :name, '%'))")
+    List<User> findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase(@Param("name") String name);
+
     /**
-     * Compter les utilisateurs par statut AML
+     * Trouve les utilisateurs par téléphone
      */
-    @Query("SELECT u.amlStatus, COUNT(u) FROM User u GROUP BY u.amlStatus")
-    List<Object[]> countUsersByAmlStatus();
-    
+    List<User> findByPhone(String phone);
+
     /**
-     * Compter les utilisateurs par nationalité
-     */
-    @Query("SELECT u.nationality, COUNT(u) FROM User u WHERE u.nationality IS NOT NULL GROUP BY u.nationality")
-    List<Object[]> countUsersByNationality();
-    
-    /**
-     * Trouver des utilisateurs avec des rôles spécifiques
-     */
-    @Query("SELECT DISTINCT u FROM User u JOIN u.userRoles ur JOIN ur.role r WHERE r.code = :roleCode")
-    List<User> findUsersByRoleCode(@Param("roleCode") String roleCode);
-    
-    /**
-     * Trouver des utilisateurs avec des permissions spécifiques
-     */
-    @Query("SELECT DISTINCT u FROM User u JOIN u.userRoles ur JOIN ur.role r WHERE :permission MEMBER OF r.permissions")
-    List<User> findUsersByPermission(@Param("permission") String permission);
-    
-    /**
-     * Trouver des utilisateurs qui nécessitent une vérification KYC
-     */
-    @Query("SELECT u FROM User u WHERE u.kycStatus IN ('NOT_VERIFIED', 'PENDING')")
-    List<User> findUsersRequiringKycVerification();
-    
-    /**
-     * Trouver des utilisateurs qui nécessitent une vérification AML
-     */
-    @Query("SELECT u FROM User u WHERE u.amlStatus IN ('NOT_CHECKED', 'PENDING')")
-    List<User> findUsersRequiringAmlVerification();
-    
-    /**
-     * Trouver des utilisateurs à haut risque
+     * Trouve les utilisateurs avec un score de risque élevé (>= 70)
      */
     @Query("SELECT u FROM User u WHERE u.riskScore >= 70")
     List<User> findHighRiskUsers();
-    
+
     /**
-     * Trouver des utilisateurs inactifs depuis une certaine date
+     * Trouve les utilisateurs nécessitant une vérification KYC
+     */
+    @Query("SELECT u FROM User u WHERE u.kycStatus IN ('NOT_VERIFIED', 'PENDING')")
+    List<User> findUsersRequiringKYCVerification();
+
+    /**
+     * Trouve les utilisateurs nécessitant une vérification AML
+     */
+    @Query("SELECT u FROM User u WHERE u.amlStatus IN ('NOT_CHECKED', 'PENDING')")
+    List<User> findUsersRequiringAMLVerification();
+
+    /**
+     * Trouve les utilisateurs inactifs depuis une date donnée
      */
     @Query("SELECT u FROM User u WHERE u.lastLoginDate < :date OR u.lastLoginDate IS NULL")
-    List<User> findInactiveUsers(@Param("date") LocalDateTime date);
-    
+    List<User> findInactiveUsersSince(@Param("date") LocalDateTime date);
+
     /**
-     * Trouver des utilisateurs avec des mots de passe expirés
+     * Trouve les utilisateurs par rôle (recherche dans le JSON des rôles)
      */
-    @Query("SELECT u FROM User u WHERE u.passwordChangedDate < :date")
-    List<User> findUsersWithExpiredPasswords(@Param("date") LocalDateTime date);
-    
+    @Query("SELECT u FROM User u WHERE u.roles LIKE %:role%")
+    List<User> findByRole(@Param("role") String role);
+
     /**
-     * Trouver des utilisateurs par langue préférée
+     * Trouve les utilisateurs par permission (recherche dans le JSON des permissions)
      */
-    List<User> findByPreferredLanguage(String language);
-    
+    @Query("SELECT u FROM User u WHERE u.permissions LIKE %:permission%")
+    List<User> findByPermission(@Param("permission") String permission);
+
     /**
-     * Trouver des utilisateurs par fuseau horaire
+     * Compte le nombre d'utilisateurs par statut KYC
      */
-    List<User> findByTimezone(String timezone);
-    
+    @Query("SELECT u.kycStatus, COUNT(u) FROM User u GROUP BY u.kycStatus")
+    List<Object[]> countUsersByKycStatus();
+
     /**
-     * Trouver des utilisateurs créés par un utilisateur spécifique
+     * Compte le nombre d'utilisateurs par statut AML
      */
-    List<User> findByCreatedBy(String createdBy);
-    
+    @Query("SELECT u.amlStatus, COUNT(u) FROM User u GROUP BY u.amlStatus")
+    List<Object[]> countUsersByAmlStatus();
+
     /**
-     * Trouver des utilisateurs modifiés par un utilisateur spécifique
+     * Compte le nombre d'utilisateurs par nationalité
      */
-    List<User> findByUpdatedBy(String updatedBy);
-    
+    @Query("SELECT u.nationality, COUNT(u) FROM User u WHERE u.nationality IS NOT NULL GROUP BY u.nationality")
+    List<Object[]> countUsersByNationality();
+
     /**
-     * Trouver des utilisateurs avec des adresses dans une ville spécifique
+     * Trouve les utilisateurs avec pagination et filtres
      */
-    List<User> findByCity(String city);
-    
+    @Query("SELECT u FROM User u WHERE " +
+           "(:username IS NULL OR u.username LIKE %:username%) AND " +
+           "(:email IS NULL OR u.email LIKE %:email%) AND " +
+           "(:firstName IS NULL OR u.firstName LIKE %:firstName%) AND " +
+           "(:lastName IS NULL OR u.lastName LIKE %:lastName%) AND " +
+           "(:kycStatus IS NULL OR u.kycStatus = :kycStatus) AND " +
+           "(:amlStatus IS NULL OR u.amlStatus = :amlStatus) AND " +
+           "(:isActive IS NULL OR u.isActive = :isActive) AND " +
+           "(:isLocked IS NULL OR u.isLocked = :isLocked)")
+    Page<User> findUsersWithFilters(
+            @Param("username") String username,
+            @Param("email") String email,
+            @Param("firstName") String firstName,
+            @Param("lastName") String lastName,
+            @Param("kycStatus") KYCStatus kycStatus,
+            @Param("amlStatus") AMLStatus amlStatus,
+            @Param("isActive") Boolean isActive,
+            @Param("isLocked") Boolean isLocked,
+            Pageable pageable
+    );
+
     /**
-     * Trouver des utilisateurs avec des codes postaux dans une plage
+     * Trouve les utilisateurs créés récemment (derniers 30 jours)
      */
-    @Query("SELECT u FROM User u WHERE u.postalCode LIKE :postalCodePattern")
-    List<User> findByPostalCodePattern(@Param("postalCodePattern") String postalCodePattern);
-    
+    @Query("SELECT u FROM User u WHERE u.createdAt >= :thirtyDaysAgo ORDER BY u.createdAt DESC")
+    List<User> findRecentlyCreatedUsers(@Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo);
+
     /**
-     * Trouver des utilisateurs avec des numéros de téléphone dans un pays spécifique
+     * Trouve les utilisateurs qui se sont connectés récemment (derniers 7 jours)
      */
-    @Query("SELECT u FROM User u WHERE u.phone LIKE :phonePattern")
-    List<User> findByPhonePattern(@Param("phonePattern") String phonePattern);
-    
+    @Query("SELECT u FROM User u WHERE u.lastLoginDate >= :sevenDaysAgo ORDER BY u.lastLoginDate DESC")
+    List<User> findRecentlyActiveUsers(@Param("sevenDaysAgo") LocalDateTime sevenDaysAgo);
+
     /**
-     * Trouver des utilisateurs avec des dates de naissance dans une plage
+     * Supprime les utilisateurs inactifs depuis plus d'un an
      */
-    @Query("SELECT u FROM User u WHERE u.dateOfBirth BETWEEN :startDate AND :endDate")
-    List<User> findByDateOfBirthBetween(@Param("startDate") java.time.LocalDate startDate, 
-                                       @Param("endDate") java.time.LocalDate endDate);
-    
-    /**
-     * Trouver des utilisateurs avec des numéros d'identité spécifiques
-     */
-    @Query("SELECT u FROM User u WHERE u.idNumber = :idNumber")
-    Optional<User> findByIdNumber(@Param("idNumber") String idNumber);
-    
-    /**
-     * Vérifier si un numéro d'identité existe
-     */
-    boolean existsByIdNumber(String idNumber);
-    
-    /**
-     * Trouver des utilisateurs avec des numéros d'identité similaires
-     */
-    @Query("SELECT u FROM User u WHERE u.idNumber LIKE :idNumberPattern")
-    List<User> findByIdNumberPattern(@Param("idNumberPattern") String idNumberPattern);
+    @Query("DELETE FROM User u WHERE u.lastLoginDate < :oneYearAgo AND u.isActive = false")
+    int deleteInactiveUsers(@Param("oneYearAgo") LocalDateTime oneYearAgo);
 }
