@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "openbank-transfers.fullname" . }}-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: {{ include "openbank-transfers.name" . }}
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: {{ include "openbank-transfers.name" . }}
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_APP_ENV
+              value: {{ .Values.env.APP_APP_ENV | quote }}
+            - name: APP_AUTH_DISABLED
+              value: {{ .Values.env.APP_AUTH_DISABLED | quote }}
+            - name: APP_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-url
+                  key: url
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080

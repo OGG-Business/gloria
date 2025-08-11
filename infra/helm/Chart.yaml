@@ -1,0 +1,5 @@
+apiVersion: v2
+name: openbank-transfers
+version: 0.1.0
+description: Helm chart for OpenBank Transfers Platform
+appVersion: "1.0.0"
