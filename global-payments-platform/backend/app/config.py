@@ -27,12 +27,12 @@ class Settings(BaseSettings):
     oidc_audience: str = "payments-api"
 
     # ISO20022
-    iso20022_xsd_dir: str | None = None  # e.g., /opt/iso20022/xsd
+    iso20022_xsd_dir: str | None = None
 
     # Connectors (SWIFT)
-    connector_swift_mode: str = "dry-run"  # dry-run | live
-    connector_swift_protocol: str = "REST"  # REST | SFTP | AS4
-    connector_swift_endpoint: str = "https://bank.example.com/as4"  # REST/AS4 base URL
+    connector_swift_mode: str = "dry-run"
+    connector_swift_protocol: str = "REST"
+    connector_swift_endpoint: str = "https://bank.example.com/as4"
     connector_swift_tls_client_cert_path: str = "/secrets/swift/client_cert.pem"
     connector_swift_tls_client_key_path: str = "/secrets/swift/client_key.pem"
     connector_swift_tls_ca_chain_path: str = "/secrets/swift/ca_chain.pem"
@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     connector_swift_sftp_password: str | None = None
     connector_swift_sftp_key_path: str | None = None
     connector_swift_sftp_remote_dir: str | None = None
+
+    # PSD2 (BNP Paribas)
+    psd2_base_url: str = "https://psd2.api.cib.bnpparibas.com"
+    psd2_api_key_header_name: str = "AddAPIKey"
+    psd2_api_key_value: str | None = None
+    psd2_tls_client_cert_path: str = "/secrets/psd2/client_cert.pem"
+    psd2_tls_client_key_path: str = "/secrets/psd2/client_key.pem"
+    psd2_tls_ca_chain_path: str = "/secrets/psd2/ca_chain.pem"
 
     # AML/KYC
     aml_threshold_usd: float = 10000.0
