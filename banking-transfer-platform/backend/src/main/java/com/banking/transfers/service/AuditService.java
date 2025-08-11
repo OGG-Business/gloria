@@ -9,396 +9,369 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Service d'audit pour la journalisation des événements de sécurité
+ * Service d'audit pour tracer les actions d'authentification et de sécurité
  */
 @Service
 public class AuditService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuditService.class);
-    private static final Logger auditLogger = LoggerFactory.getLogger("AUDIT");
 
     /**
-     * Journalise une tentative de connexion
+     * Trace une tentative de connexion
      */
-    public void logLogin(User user, String ipAddress, String userAgent, boolean success, String errorMessage) {
-        String eventType = success ? "LOGIN_SUCCESS" : "LOGIN_FAILED";
-        String message = String.format(
-            "Event: %s | User: %s | IP: %s | UserAgent: %s | Success: %s | Error: %s",
-            eventType,
-            user != null ? user.getUsername() : "UNKNOWN",
-            ipAddress != null ? ipAddress : "UNKNOWN",
-            userAgent != null ? userAgent : "UNKNOWN",
-            success,
-            errorMessage != null ? errorMessage : "N/A"
-        );
-
+    public void logLogin(User user, String clientIp, String userAgent, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
         if (success) {
-            auditLogger.info(message);
+            logger.info("AUTH_SUCCESS - User: {} (ID: {}) logged in successfully from IP: {} with User-Agent: {}", 
+                username, userId, clientIp, userAgent);
         } else {
-            auditLogger.warn(message);
+            logger.warn("AUTH_FAILURE - Failed login attempt for user: {} from IP: {} with User-Agent: {}. Error: {}", 
+                username, clientIp, userAgent, errorMessage);
         }
-
-        // Log détaillé pour le debugging
-        logger.debug("Login attempt - User: {}, IP: {}, Success: {}, Error: {}", 
-            user != null ? user.getUsername() : "UNKNOWN", 
-            ipAddress, 
-            success, 
-            errorMessage);
+        
+        // TODO: Sauvegarder dans la base de données pour un audit complet
+        // saveAuditLog("LOGIN", user, clientIp, userAgent, success, errorMessage);
     }
 
     /**
-     * Journalise une déconnexion
+     * Trace une déconnexion
      */
-    public void logLogout(User user, String ipAddress, boolean success, String errorMessage) {
-        String eventType = success ? "LOGOUT_SUCCESS" : "LOGOUT_FAILED";
-        String message = String.format(
-            "Event: %s | User: %s | IP: %s | Success: %s | Error: %s",
-            eventType,
-            user != null ? user.getUsername() : "UNKNOWN",
-            ipAddress != null ? ipAddress : "UNKNOWN",
-            success,
-            errorMessage != null ? errorMessage : "N/A"
-        );
-
-        auditLogger.info(message);
-        logger.debug("Logout attempt - User: {}, IP: {}, Success: {}", 
-            user != null ? user.getUsername() : "UNKNOWN", 
-            ipAddress, 
-            success);
+    public void logLogout(User user, String clientIp, String userAgent, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("AUTH_LOGOUT - User: {} (ID: {}) logged out from IP: {} with User-Agent: {}", 
+                username, userId, clientIp, userAgent);
+        } else {
+            logger.warn("AUTH_LOGOUT_ERROR - Error during logout for user: {} from IP: {}. Error: {}", 
+                username, clientIp, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("LOGOUT", user, clientIp, userAgent, success, errorMessage);
     }
 
     /**
-     * Journalise un changement de mot de passe
+     * Trace un échec de connexion
+     */
+    public void logFailedLogin(User user, String reason) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        logger.warn("AUTH_FAILED_LOGIN - User: {} (ID: {}) failed login attempt. Reason: {}", 
+            username, userId, reason);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("FAILED_LOGIN", user, null, null, false, reason);
+    }
+
+    /**
+     * Trace un rafraîchissement de token
+     */
+    public void logTokenRefresh(User user, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("TOKEN_REFRESH - User: {} (ID: {}) refreshed their access token", username, userId);
+        } else {
+            logger.warn("TOKEN_REFRESH_ERROR - Failed token refresh for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("TOKEN_REFRESH", user, null, null, success, errorMessage);
+    }
+
+    /**
+     * Trace un changement de mot de passe
      */
     public void logPasswordChange(User user, boolean success, String errorMessage) {
-        String eventType = success ? "PASSWORD_CHANGE_SUCCESS" : "PASSWORD_CHANGE_FAILED";
-        String message = String.format(
-            "Event: %s | User: %s | Success: %s | Error: %s",
-            eventType,
-            user.getUsername(),
-            success,
-            errorMessage != null ? errorMessage : "N/A"
-        );
-
-        auditLogger.info(message);
-        logger.debug("Password change - User: {}, Success: {}", user.getUsername(), success);
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("PASSWORD_CHANGE - User: {} (ID: {}) changed their password", username, userId);
+        } else {
+            logger.warn("PASSWORD_CHANGE_ERROR - Failed password change for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("PASSWORD_CHANGE", user, null, null, success, errorMessage);
     }
 
     /**
-     * Journalise un changement de statut MFA
+     * Trace une demande de réinitialisation de mot de passe
+     */
+    public void logPasswordResetRequest(User user, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("PASSWORD_RESET_REQUEST - User: {} (ID: {}) requested password reset", username, userId);
+        } else {
+            logger.warn("PASSWORD_RESET_REQUEST_ERROR - Failed password reset request for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("PASSWORD_RESET_REQUEST", user, null, null, success, errorMessage);
+    }
+
+    /**
+     * Trace une réinitialisation de mot de passe
+     */
+    public void logPasswordReset(User user, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("PASSWORD_RESET - User: {} (ID: {}) reset their password", username, userId);
+        } else {
+            logger.warn("PASSWORD_RESET_ERROR - Failed password reset for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("PASSWORD_RESET", user, null, null, success, errorMessage);
+    }
+
+    /**
+     * Trace une activation/désactivation de MFA
      */
     public void logMfaToggle(User user, boolean enabled, boolean success, String errorMessage) {
-        String eventType = success ? "MFA_TOGGLE_SUCCESS" : "MFA_TOGGLE_FAILED";
-        String action = enabled ? "ENABLED" : "DISABLED";
-        String message = String.format(
-            "Event: %s | User: %s | Action: %s | Success: %s | Error: %s",
-            eventType,
-            user.getUsername(),
-            action,
-            success,
-            errorMessage != null ? errorMessage : "N/A"
-        );
-
-        auditLogger.info(message);
-        logger.debug("MFA toggle - User: {}, Action: {}, Success: {}", 
-            user.getUsername(), action, success);
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("MFA_TOGGLE - User: {} (ID: {}) {} MFA", username, userId, enabled ? "enabled" : "disabled");
+        } else {
+            logger.warn("MFA_TOGGLE_ERROR - Failed to {} MFA for user: {}. Error: {}", 
+                enabled ? "enable" : "disable", username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("MFA_TOGGLE", user, null, null, success, errorMessage);
     }
 
     /**
-     * Journalise un déverrouillage de compte
+     * Trace une vérification MFA
+     */
+    public void logMfaVerification(User user, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("MFA_VERIFICATION - User: {} (ID: {}) successfully verified MFA code", username, userId);
+        } else {
+            logger.warn("MFA_VERIFICATION_ERROR - Failed MFA verification for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("MFA_VERIFICATION", user, null, null, success, errorMessage);
+    }
+
+    /**
+     * Trace un verrouillage de compte
+     */
+    public void logAccountLock(User user, String reason) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        logger.warn("ACCOUNT_LOCK - User: {} (ID: {}) account locked. Reason: {}", 
+            username, userId, reason);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("ACCOUNT_LOCK", user, null, null, false, reason);
+    }
+
+    /**
+     * Trace un déverrouillage de compte
      */
     public void logAccountUnlock(User user, boolean success, String errorMessage) {
-        String eventType = success ? "ACCOUNT_UNLOCK_SUCCESS" : "ACCOUNT_UNLOCK_FAILED";
-        String message = String.format(
-            "Event: %s | User: %s | Success: %s | Error: %s",
-            eventType,
-            user.getUsername(),
-            success,
-            errorMessage != null ? errorMessage : "N/A"
-        );
-
-        auditLogger.info(message);
-        logger.debug("Account unlock - User: {}, Success: {}", user.getUsername(), success);
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("ACCOUNT_UNLOCK - User: {} (ID: {}) account unlocked", username, userId);
+        } else {
+            logger.warn("ACCOUNT_UNLOCK_ERROR - Failed to unlock account for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("ACCOUNT_UNLOCK", user, null, null, success, errorMessage);
     }
 
     /**
-     * Journalise un changement de statut de compte
+     * Trace un changement de statut de compte
      */
     public void logAccountStatusChange(User user, boolean active, boolean success, String errorMessage) {
-        String eventType = success ? "ACCOUNT_STATUS_CHANGE_SUCCESS" : "ACCOUNT_STATUS_CHANGE_FAILED";
-        String action = active ? "ACTIVATED" : "DEACTIVATED";
-        String message = String.format(
-            "Event: %s | User: %s | Action: %s | Success: %s | Error: %s",
-            eventType,
-            user.getUsername(),
-            action,
-            success,
-            errorMessage != null ? errorMessage : "N/A"
-        );
-
-        auditLogger.info(message);
-        logger.debug("Account status change - User: {}, Action: {}, Success: {}", 
-            user.getUsername(), action, success);
-    }
-
-    /**
-     * Journalise une création d'utilisateur
-     */
-    public void logUserCreation(User user) {
-        String message = String.format(
-            "Event: USER_CREATED | User: %s | Email: %s | CreatedBy: %s",
-            user.getUsername(),
-            user.getEmail(),
-            user.getCreatedBy() != null ? user.getCreatedBy() : "SYSTEM"
-        );
-
-        auditLogger.info(message);
-        logger.debug("User created - Username: {}, Email: {}", user.getUsername(), user.getEmail());
-    }
-
-    /**
-     * Journalise une modification d'utilisateur
-     */
-    public void logUserUpdate(User user) {
-        String message = String.format(
-            "Event: USER_UPDATED | User: %s | UpdatedBy: %s | UpdatedAt: %s",
-            user.getUsername(),
-            user.getUpdatedBy() != null ? user.getUpdatedBy() : "SYSTEM",
-            user.getUpdatedAt()
-        );
-
-        auditLogger.info(message);
-        logger.debug("User updated - Username: {}, UpdatedBy: {}", 
-            user.getUsername(), user.getUpdatedBy());
-    }
-
-    /**
-     * Journalise une suppression d'utilisateur
-     */
-    public void logUserDeletion(User user, String deletedBy) {
-        String message = String.format(
-            "Event: USER_DELETED | User: %s | DeletedBy: %s | DeletedAt: %s",
-            user.getUsername(),
-            deletedBy != null ? deletedBy : "SYSTEM",
-            LocalDateTime.now()
-        );
-
-        auditLogger.warn(message);
-        logger.debug("User deleted - Username: {}, DeletedBy: {}", user.getUsername(), deletedBy);
-    }
-
-    /**
-     * Journalise un changement de statut KYC
-     */
-    public void logKycStatusChange(User user, String oldStatus, String newStatus) {
-        String message = String.format(
-            "Event: KYC_STATUS_CHANGE | User: %s | OldStatus: %s | NewStatus: %s | ChangedAt: %s",
-            user.getUsername(),
-            oldStatus,
-            newStatus,
-            LocalDateTime.now()
-        );
-
-        auditLogger.info(message);
-        logger.debug("KYC status change - User: {}, OldStatus: {}, NewStatus: {}", 
-            user.getUsername(), oldStatus, newStatus);
-    }
-
-    /**
-     * Journalise un changement de statut AML
-     */
-    public void logAmlStatusChange(User user, String oldStatus, String newStatus) {
-        String message = String.format(
-            "Event: AML_STATUS_CHANGE | User: %s | OldStatus: %s | NewStatus: %s | ChangedAt: %s",
-            user.getUsername(),
-            oldStatus,
-            newStatus,
-            LocalDateTime.now()
-        );
-
-        auditLogger.info(message);
-        logger.debug("AML status change - User: {}, OldStatus: {}, NewStatus: {}", 
-            user.getUsername(), oldStatus, newStatus);
-    }
-
-    /**
-     * Journalise un changement de score de risque
-     */
-    public void logRiskScoreChange(User user, Integer oldScore, Integer newScore) {
-        String message = String.format(
-            "Event: RISK_SCORE_CHANGE | User: %s | OldScore: %d | NewScore: %d | ChangedAt: %s",
-            user.getUsername(),
-            oldScore != null ? oldScore : 0,
-            newScore != null ? newScore : 0,
-            LocalDateTime.now()
-        );
-
-        auditLogger.info(message);
-        logger.debug("Risk score change - User: {}, OldScore: {}, NewScore: {}", 
-            user.getUsername(), oldScore, newScore);
-    }
-
-    /**
-     * Journalise un accès à une ressource sensible
-     */
-    public void logSensitiveResourceAccess(User user, String resource, String action, boolean success) {
-        String eventType = success ? "SENSITIVE_ACCESS_SUCCESS" : "SENSITIVE_ACCESS_FAILED";
-        String message = String.format(
-            "Event: %s | User: %s | Resource: %s | Action: %s | Success: %s",
-            eventType,
-            user.getUsername(),
-            resource,
-            action,
-            success
-        );
-
-        auditLogger.warn(message);
-        logger.debug("Sensitive resource access - User: {}, Resource: {}, Action: {}, Success: {}", 
-            user.getUsername(), resource, action, success);
-    }
-
-    /**
-     * Journalise une tentative d'accès non autorisé
-     */
-    public void logUnauthorizedAccess(String username, String resource, String ipAddress) {
-        String message = String.format(
-            "Event: UNAUTHORIZED_ACCESS | User: %s | Resource: %s | IP: %s | Timestamp: %s",
-            username != null ? username : "ANONYMOUS",
-            resource,
-            ipAddress != null ? ipAddress : "UNKNOWN",
-            LocalDateTime.now()
-        );
-
-        auditLogger.warn(message);
-        logger.warn("Unauthorized access attempt - User: {}, Resource: {}, IP: {}", 
-            username, resource, ipAddress);
-    }
-
-    /**
-     * Journalise une activité suspecte
-     */
-    public void logSuspiciousActivity(User user, String activity, String details) {
-        String message = String.format(
-            "Event: SUSPICIOUS_ACTIVITY | User: %s | Activity: %s | Details: %s | Timestamp: %s",
-            user != null ? user.getUsername() : "UNKNOWN",
-            activity,
-            details,
-            LocalDateTime.now()
-        );
-
-        auditLogger.warn(message);
-        logger.warn("Suspicious activity detected - User: {}, Activity: {}, Details: {}", 
-            user != null ? user.getUsername() : "UNKNOWN", activity, details);
-    }
-
-    /**
-     * Journalise un événement de sécurité critique
-     */
-    public void logSecurityEvent(String eventType, String details, String severity) {
-        String message = String.format(
-            "Event: %s | Details: %s | Severity: %s | Timestamp: %s",
-            eventType,
-            details,
-            severity,
-            LocalDateTime.now()
-        );
-
-        switch (severity.toUpperCase()) {
-            case "CRITICAL":
-                auditLogger.error(message);
-                logger.error("Critical security event - Type: {}, Details: {}", eventType, details);
-                break;
-            case "HIGH":
-                auditLogger.warn(message);
-                logger.warn("High severity security event - Type: {}, Details: {}", eventType, details);
-                break;
-            case "MEDIUM":
-                auditLogger.info(message);
-                logger.info("Medium severity security event - Type: {}, Details: {}", eventType, details);
-                break;
-            case "LOW":
-                auditLogger.info(message);
-                logger.debug("Low severity security event - Type: {}, Details: {}", eventType, details);
-                break;
-            default:
-                auditLogger.info(message);
-                logger.info("Security event - Type: {}, Details: {}", eventType, details);
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("ACCOUNT_STATUS_CHANGE - User: {} (ID: {}) account status changed to {}", 
+                username, userId, active ? "ACTIVE" : "INACTIVE");
+        } else {
+            logger.warn("ACCOUNT_STATUS_CHANGE_ERROR - Failed to change account status for user: {}. Error: {}", 
+                username, errorMessage);
         }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("ACCOUNT_STATUS_CHANGE", user, null, null, success, errorMessage);
     }
 
     /**
-     * Journalise un événement de transfert
+     * Trace une tentative d'accès non autorisé
      */
-    public void logTransferEvent(String transferId, String eventType, String details, User user) {
-        String message = String.format(
-            "Event: TRANSFER_%s | TransferId: %s | User: %s | Details: %s | Timestamp: %s",
-            eventType.toUpperCase(),
-            transferId,
-            user != null ? user.getUsername() : "SYSTEM",
-            details,
-            LocalDateTime.now()
-        );
-
-        auditLogger.info(message);
-        logger.debug("Transfer event - TransferId: {}, EventType: {}, User: {}, Details: {}", 
-            transferId, eventType, user != null ? user.getUsername() : "SYSTEM", details);
+    public void logUnauthorizedAccess(String resource, String clientIp, String userAgent, String reason) {
+        logger.warn("UNAUTHORIZED_ACCESS - Unauthorized access attempt to resource: {} from IP: {} with User-Agent: {}. Reason: {}", 
+            resource, clientIp, userAgent, reason);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("UNAUTHORIZED_ACCESS", null, clientIp, userAgent, false, reason);
     }
 
     /**
-     * Journalise un événement de compte
+     * Trace une tentative d'accès à une ressource interdite
      */
-    public void logAccountEvent(String accountId, String eventType, String details, User user) {
-        String message = String.format(
-            "Event: ACCOUNT_%s | AccountId: %s | User: %s | Details: %s | Timestamp: %s",
-            eventType.toUpperCase(),
-            accountId,
-            user != null ? user.getUsername() : "SYSTEM",
-            details,
-            LocalDateTime.now()
-        );
-
-        auditLogger.info(message);
-        logger.debug("Account event - AccountId: {}, EventType: {}, User: {}, Details: {}", 
-            accountId, eventType, user != null ? user.getUsername() : "SYSTEM", details);
+    public void logForbiddenAccess(String resource, String clientIp, String userAgent, String reason) {
+        logger.warn("FORBIDDEN_ACCESS - Forbidden access attempt to resource: {} from IP: {} with User-Agent: {}. Reason: {}", 
+            resource, clientIp, userAgent, reason);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("FORBIDDEN_ACCESS", null, clientIp, userAgent, false, reason);
     }
 
     /**
-     * Journalise un événement système
+     * Trace une erreur de sécurité
      */
-    public void logSystemEvent(String eventType, String details, String severity) {
-        String message = String.format(
-            "Event: SYSTEM_%s | Details: %s | Severity: %s | Timestamp: %s",
-            eventType.toUpperCase(),
-            details,
-            severity,
-            LocalDateTime.now()
-        );
-
-        auditLogger.info(message);
-        logger.info("System event - Type: {}, Details: {}, Severity: {}", eventType, details, severity);
+    public void logSecurityError(String operation, String clientIp, String userAgent, String errorMessage) {
+        logger.error("SECURITY_ERROR - Security error during operation: {} from IP: {} with User-Agent: {}. Error: {}", 
+            operation, clientIp, userAgent, errorMessage);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("SECURITY_ERROR", null, clientIp, userAgent, false, errorMessage);
     }
 
     /**
-     * Génère un ID de corrélation pour le suivi des événements
+     * Trace une activité suspecte
      */
-    public String generateCorrelationId() {
-        return UUID.randomUUID().toString();
+    public void logSuspiciousActivity(User user, String activity, String clientIp, String userAgent, String details) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        logger.warn("SUSPICIOUS_ACTIVITY - User: {} (ID: {}) suspicious activity detected: {} from IP: {} with User-Agent: {}. Details: {}", 
+            username, userId, activity, clientIp, userAgent, details);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("SUSPICIOUS_ACTIVITY", user, clientIp, userAgent, false, details);
     }
 
     /**
-     * Journalise un événement avec un ID de corrélation
+     * Trace une modification de profil utilisateur
      */
-    public void logEventWithCorrelation(String correlationId, String eventType, String details) {
-        String message = String.format(
-            "Event: %s | CorrelationId: %s | Details: %s | Timestamp: %s",
-            eventType,
-            correlationId,
-            details,
-            LocalDateTime.now()
-        );
+    public void logProfileUpdate(User user, String field, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("PROFILE_UPDATE - User: {} (ID: {}) updated field: {}", username, userId, field);
+        } else {
+            logger.warn("PROFILE_UPDATE_ERROR - Failed to update field: {} for user: {}. Error: {}", 
+                field, username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("PROFILE_UPDATE", user, null, null, success, errorMessage);
+    }
 
-        auditLogger.info(message);
-        logger.debug("Event with correlation - CorrelationId: {}, EventType: {}, Details: {}", 
-            correlationId, eventType, details);
+    /**
+     * Trace une création de compte
+     */
+    public void logAccountCreation(User user, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("ACCOUNT_CREATION - New user account created: {} (ID: {})", username, userId);
+        } else {
+            logger.warn("ACCOUNT_CREATION_ERROR - Failed to create account for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("ACCOUNT_CREATION", user, null, null, success, errorMessage);
+    }
+
+    /**
+     * Trace une suppression de compte
+     */
+    public void logAccountDeletion(User user, boolean success, String errorMessage) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        if (success) {
+            logger.info("ACCOUNT_DELETION - User account deleted: {} (ID: {})", username, userId);
+        } else {
+            logger.warn("ACCOUNT_DELETION_ERROR - Failed to delete account for user: {}. Error: {}", 
+                username, errorMessage);
+        }
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("ACCOUNT_DELETION", user, null, null, success, errorMessage);
+    }
+
+    /**
+     * Trace une session expirée
+     */
+    public void logSessionExpired(User user, String sessionId) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        logger.info("SESSION_EXPIRED - Session expired for user: {} (ID: {}) with session ID: {}", 
+            username, userId, sessionId);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("SESSION_EXPIRED", user, null, null, true, "Session ID: " + sessionId);
+    }
+
+    /**
+     * Trace une session invalidée
+     */
+    public void logSessionInvalidated(User user, String sessionId, String reason) {
+        String username = user != null ? user.getUsername() : "UNKNOWN";
+        String userId = user != null ? user.getId().toString() : "UNKNOWN";
+        
+        logger.warn("SESSION_INVALIDATED - Session invalidated for user: {} (ID: {}) with session ID: {}. Reason: {}", 
+            username, userId, sessionId, reason);
+        
+        // TODO: Sauvegarder dans la base de données
+        // saveAuditLog("SESSION_INVALIDATED", user, null, null, false, reason);
+    }
+
+    /**
+     * Méthode générique pour sauvegarder un log d'audit dans la base de données
+     * Cette méthode sera implémentée plus tard avec l'entité AuditLog
+     */
+    private void saveAuditLog(String action, User user, String clientIp, String userAgent, 
+                             boolean success, String details) {
+        // TODO: Implémenter la sauvegarde dans la base de données
+        // AuditLog auditLog = new AuditLog();
+        // auditLog.setAction(action);
+        // auditLog.setUserId(user != null ? user.getId() : null);
+        // auditLog.setUsername(user != null ? user.getUsername() : "UNKNOWN");
+        // auditLog.setClientIp(clientIp);
+        // auditLog.setUserAgent(userAgent);
+        // auditLog.setSuccess(success);
+        // auditLog.setDetails(details);
+        // auditLog.setTimestamp(LocalDateTime.now());
+        // auditLogRepository.save(auditLog);
     }
 }

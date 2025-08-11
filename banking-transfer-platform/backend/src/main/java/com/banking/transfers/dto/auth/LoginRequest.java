@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 public class LoginRequest {
 
     @NotBlank(message = "Le nom d'utilisateur ou l'email est obligatoire")
-    @Size(min = 3, max = 100, message = "L'identifiant doit contenir entre 3 et 100 caractères")
+    @Size(min = 3, max = 100, message = "Le nom d'utilisateur ou l'email doit contenir entre 3 et 100 caractères")
     private String usernameOrEmail;
 
     @NotBlank(message = "Le mot de passe est obligatoire")
@@ -18,13 +18,11 @@ public class LoginRequest {
 
     private String mfaCode;
 
-    private String deviceId;
+    private Boolean rememberMe = false;
+
+    private String clientIp;
 
     private String userAgent;
-
-    private String ipAddress;
-
-    private Boolean rememberMe = false;
 
     // Constructeurs
     public LoginRequest() {}
@@ -65,12 +63,20 @@ public class LoginRequest {
         this.mfaCode = mfaCode;
     }
 
-    public String getDeviceId() {
-        return deviceId;
+    public Boolean getRememberMe() {
+        return rememberMe;
     }
 
-    public void setDeviceId(String deviceId) {
-        this.deviceId = deviceId;
+    public void setRememberMe(Boolean rememberMe) {
+        this.rememberMe = rememberMe;
+    }
+
+    public String getClientIp() {
+        return clientIp;
+    }
+
+    public void setClientIp(String clientIp) {
+        this.clientIp = clientIp;
     }
 
     public String getUserAgent() {
@@ -79,22 +85,6 @@ public class LoginRequest {
 
     public void setUserAgent(String userAgent) {
         this.userAgent = userAgent;
-    }
-
-    public String getIpAddress() {
-        return ipAddress;
-    }
-
-    public void setIpAddress(String ipAddress) {
-        this.ipAddress = ipAddress;
-    }
-
-    public Boolean getRememberMe() {
-        return rememberMe;
-    }
-
-    public void setRememberMe(Boolean rememberMe) {
-        this.rememberMe = rememberMe;
     }
 
     // Méthodes utilitaires
@@ -106,8 +96,16 @@ public class LoginRequest {
         return rememberMe != null && rememberMe;
     }
 
-    public boolean hasDeviceInfo() {
-        return deviceId != null && !deviceId.trim().isEmpty();
+    public String getUsernameOrEmailTrimmed() {
+        return usernameOrEmail != null ? usernameOrEmail.trim() : null;
+    }
+
+    public String getPasswordTrimmed() {
+        return password != null ? password.trim() : null;
+    }
+
+    public String getMfaCodeTrimmed() {
+        return mfaCode != null ? mfaCode.trim() : null;
     }
 
     @Override
@@ -115,10 +113,9 @@ public class LoginRequest {
         return "LoginRequest{" +
                 "usernameOrEmail='" + usernameOrEmail + '\'' +
                 ", mfaCode='" + (mfaCode != null ? "***" : "null") + '\'' +
-                ", deviceId='" + deviceId + '\'' +
-                ", userAgent='" + userAgent + '\'' +
-                ", ipAddress='" + ipAddress + '\'' +
                 ", rememberMe=" + rememberMe +
+                ", clientIp='" + clientIp + '\'' +
+                ", userAgent='" + userAgent + '\'' +
                 '}';
     }
 }

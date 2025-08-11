@@ -1,100 +1,57 @@
 package com.banking.transfers.dto.auth;
 
-import com.banking.transfers.model.AMLStatus;
 import com.banking.transfers.model.KYCStatus;
+import com.banking.transfers.model.AMLStatus;
 
 import java.time.LocalDateTime;
-import java.util.Set;
+import java.util.UUID;
 
 /**
  * DTO pour les réponses de connexion
  */
 public class LoginResponse {
 
-    private String accessToken;
-    private String refreshToken;
-    private String tokenType = "Bearer";
-    private Long expiresIn;
-    private LocalDateTime expiresAt;
-    private String userId;
+    private UUID userId;
     private String username;
     private String email;
     private String firstName;
     private String lastName;
     private String fullName;
-    private Set<String> roles;
-    private Set<String> permissions;
+    private String accessToken;
+    private String refreshToken;
+    private String tokenType = "Bearer";
+    private Long expiresIn;
+    private LocalDateTime expiresAt;
     private KYCStatus kycStatus;
     private AMLStatus amlStatus;
     private Integer riskScore;
     private Boolean mfaEnabled;
     private Boolean mfaRequired;
-    private Boolean isCompliant;
+    private String preferredLanguage;
+    private String timezone;
+    private Boolean isFirstLogin;
     private String sessionId;
-    private LocalDateTime loginTime;
-    private String deviceId;
-    private String ipAddress;
+    private LocalDateTime lastLoginDate;
+    private String message;
 
     // Constructeurs
     public LoginResponse() {}
 
-    public LoginResponse(String accessToken, String refreshToken, Long expiresIn) {
-        this.accessToken = accessToken;
-        this.refreshToken = refreshToken;
-        this.expiresIn = expiresIn;
-        this.expiresAt = LocalDateTime.now().plusSeconds(expiresIn);
-        this.loginTime = LocalDateTime.now();
+    public LoginResponse(UUID userId, String username, String email, String firstName, String lastName) {
+        this.userId = userId;
+        this.username = username;
+        this.email = email;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.fullName = firstName + " " + lastName;
     }
 
     // Getters et Setters
-    public String getAccessToken() {
-        return accessToken;
-    }
-
-    public void setAccessToken(String accessToken) {
-        this.accessToken = accessToken;
-    }
-
-    public String getRefreshToken() {
-        return refreshToken;
-    }
-
-    public void setRefreshToken(String refreshToken) {
-        this.refreshToken = refreshToken;
-    }
-
-    public String getTokenType() {
-        return tokenType;
-    }
-
-    public void setTokenType(String tokenType) {
-        this.tokenType = tokenType;
-    }
-
-    public Long getExpiresIn() {
-        return expiresIn;
-    }
-
-    public void setExpiresIn(Long expiresIn) {
-        this.expiresIn = expiresIn;
-        if (expiresIn != null) {
-            this.expiresAt = LocalDateTime.now().plusSeconds(expiresIn);
-        }
-    }
-
-    public LocalDateTime getExpiresAt() {
-        return expiresAt;
-    }
-
-    public void setExpiresAt(LocalDateTime expiresAt) {
-        this.expiresAt = expiresAt;
-    }
-
-    public String getUserId() {
+    public UUID getUserId() {
         return userId;
     }
 
-    public void setUserId(String userId) {
+    public void setUserId(UUID userId) {
         this.userId = userId;
     }
 
@@ -138,20 +95,44 @@ public class LoginResponse {
         this.fullName = fullName;
     }
 
-    public Set<String> getRoles() {
-        return roles;
+    public String getAccessToken() {
+        return accessToken;
     }
 
-    public void setRoles(Set<String> roles) {
-        this.roles = roles;
+    public void setAccessToken(String accessToken) {
+        this.accessToken = accessToken;
     }
 
-    public Set<String> getPermissions() {
-        return permissions;
+    public String getRefreshToken() {
+        return refreshToken;
     }
 
-    public void setPermissions(Set<String> permissions) {
-        this.permissions = permissions;
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
+    }
+
+    public String getTokenType() {
+        return tokenType;
+    }
+
+    public void setTokenType(String tokenType) {
+        this.tokenType = tokenType;
+    }
+
+    public Long getExpiresIn() {
+        return expiresIn;
+    }
+
+    public void setExpiresIn(Long expiresIn) {
+        this.expiresIn = expiresIn;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
     }
 
     public KYCStatus getKycStatus() {
@@ -194,12 +175,28 @@ public class LoginResponse {
         this.mfaRequired = mfaRequired;
     }
 
-    public Boolean getIsCompliant() {
-        return isCompliant;
+    public String getPreferredLanguage() {
+        return preferredLanguage;
     }
 
-    public void setIsCompliant(Boolean isCompliant) {
-        this.isCompliant = isCompliant;
+    public void setPreferredLanguage(String preferredLanguage) {
+        this.preferredLanguage = preferredLanguage;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public Boolean getIsFirstLogin() {
+        return isFirstLogin;
+    }
+
+    public void setIsFirstLogin(Boolean isFirstLogin) {
+        this.isFirstLogin = isFirstLogin;
     }
 
     public String getSessionId() {
@@ -210,82 +207,74 @@ public class LoginResponse {
         this.sessionId = sessionId;
     }
 
-    public LocalDateTime getLoginTime() {
-        return loginTime;
+    public LocalDateTime getLastLoginDate() {
+        return lastLoginDate;
     }
 
-    public void setLoginTime(LocalDateTime loginTime) {
-        this.loginTime = loginTime;
+    public void setLastLoginDate(LocalDateTime lastLoginDate) {
+        this.lastLoginDate = lastLoginDate;
     }
 
-    public String getDeviceId() {
-        return deviceId;
+    public String getMessage() {
+        return message;
     }
 
-    public void setDeviceId(String deviceId) {
-        this.deviceId = deviceId;
-    }
-
-    public String getIpAddress() {
-        return ipAddress;
-    }
-
-    public void setIpAddress(String ipAddress) {
-        this.ipAddress = ipAddress;
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     // Méthodes utilitaires
-    public boolean isTokenExpired() {
-        return expiresAt != null && LocalDateTime.now().isAfter(expiresAt);
+    public boolean isKycVerified() {
+        return kycStatus == KYCStatus.VERIFIED;
     }
 
-    public boolean hasRole(String role) {
-        return roles != null && roles.contains(role);
+    public boolean isAmlPassed() {
+        return amlStatus == AMLStatus.PASSED;
     }
 
-    public boolean hasPermission(String permission) {
-        return permissions != null && permissions.contains(permission);
-    }
-
-    public boolean isAdmin() {
-        return hasRole("ADMIN") || hasRole("SUPER_ADMIN");
-    }
-
-    public boolean isUser() {
-        return hasRole("USER");
-    }
-
-    public boolean isComplianceRequired() {
-        return kycStatus != KYCStatus.VERIFIED || amlStatus != AMLStatus.PASSED;
+    public boolean isCompliant() {
+        return isKycVerified() && isAmlPassed();
     }
 
     public boolean isHighRisk() {
-        return riskScore != null && riskScore >= 7;
+        return riskScore != null && riskScore >= 70;
+    }
+
+    public boolean requiresMfaSetup() {
+        return mfaEnabled != null && mfaEnabled && mfaRequired != null && mfaRequired;
+    }
+
+    public boolean isTokenValid() {
+        return accessToken != null && !accessToken.trim().isEmpty() && 
+               expiresAt != null && expiresAt.isAfter(LocalDateTime.now());
+    }
+
+    public boolean hasRefreshToken() {
+        return refreshToken != null && !refreshToken.trim().isEmpty();
+    }
+
+    public String getTokenHeader() {
+        return tokenType + " " + accessToken;
     }
 
     @Override
     public String toString() {
         return "LoginResponse{" +
-                "accessToken='" + (accessToken != null ? "***" : "null") + '\'' +
-                ", refreshToken='" + (refreshToken != null ? "***" : "null") + '\'' +
-                ", tokenType='" + tokenType + '\'' +
-                ", expiresIn=" + expiresIn +
-                ", expiresAt=" + expiresAt +
-                ", userId='" + userId + '\'' +
+                "userId=" + userId +
                 ", username='" + username + '\'' +
                 ", email='" + email + '\'' +
                 ", fullName='" + fullName + '\'' +
-                ", roles=" + roles +
+                ", accessToken='" + (accessToken != null ? "***" : "null") + '\'' +
+                ", refreshToken='" + (refreshToken != null ? "***" : "null") + '\'' +
+                ", expiresIn=" + expiresIn +
+                ", expiresAt=" + expiresAt +
                 ", kycStatus=" + kycStatus +
                 ", amlStatus=" + amlStatus +
                 ", riskScore=" + riskScore +
                 ", mfaEnabled=" + mfaEnabled +
                 ", mfaRequired=" + mfaRequired +
-                ", isCompliant=" + isCompliant +
                 ", sessionId='" + sessionId + '\'' +
-                ", loginTime=" + loginTime +
-                ", deviceId='" + deviceId + '\'' +
-                ", ipAddress='" + ipAddress + '\'' +
+                ", message='" + message + '\'' +
                 '}';
     }
 }

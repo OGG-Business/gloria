@@ -3,13 +3,16 @@ package com.banking.transfers.service;
 import com.banking.transfers.dto.auth.LoginRequest;
 import com.banking.transfers.dto.auth.LoginResponse;
 import com.banking.transfers.model.User;
+import com.banking.transfers.model.KYCStatus;
+import com.banking.transfers.model.AMLStatus;
 import com.banking.transfers.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,340 +28,383 @@ import java.util.UUID;
 @Transactional
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtService jwtService;
-    private final MfaService mfaService;
-    private final AuditService auditService;
+    @Autowired
+    private UserRepository userRepository;
 
-    public AuthService(UserRepository userRepository,
-                      PasswordEncoder passwordEncoder,
-                      AuthenticationManager authenticationManager,
-                      JwtService jwtService,
-                      MfaService mfaService,
-                      AuditService auditService) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.authenticationManager = authenticationManager;
-        this.jwtService = jwtService;
-        this.mfaService = mfaService;
-        this.auditService = auditService;
-    }
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private MfaService mfaService;
+
+    @Autowired
+    private AuditService auditService;
 
     /**
-     * Authentifie un utilisateur
+     * Authentification d'un utilisateur
      */
-    public LoginResponse authenticate(LoginRequest loginRequest) {
+    public LoginResponse login(LoginRequest request) {
         try {
-            // Vérifier si l'utilisateur existe
-            Optional<User> userOpt = findUserByIdentifier(loginRequest.getUsernameOrEmail());
-            if (userOpt.isEmpty()) {
+            // Validation des champs
+            validateLoginRequest(request);
+
+            // Recherche de l'utilisateur
+            User user = findUserByUsernameOrEmail(request.getUsernameOrEmailTrimmed());
+            if (user == null) {
                 throw new BadCredentialsException("Identifiants invalides");
             }
 
-            User user = userOpt.get();
+            // Vérification du statut du compte
+            validateUserAccount(user);
 
-            // Vérifier si le compte est actif et non verrouillé
-            if (!user.isEnabled()) {
-                if (user.getIsLocked()) {
-                    throw new LockedException("Compte verrouillé. Contactez l'administrateur.");
-                } else {
-                    throw new BadCredentialsException("Compte inactif");
-                }
-            }
-
-            // Authentifier avec Spring Security
+            // Authentification avec Spring Security
             Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                     user.getUsername(),
-                    loginRequest.getPassword()
+                    request.getPasswordTrimmed()
                 )
             );
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-
-            // Vérifier MFA si activé
-            if (user.getMfaEnabled()) {
-                if (loginRequest.getMfaCode() == null || loginRequest.getMfaCode().trim().isEmpty()) {
-                    throw new BadCredentialsException("Code MFA requis");
+            // Vérification MFA si activé
+            if (user.getMfaEnabled() && user.getMfaSecret() != null) {
+                if (!request.isMfaRequired()) {
+                    return createMfaRequiredResponse(user);
                 }
-
-                if (!mfaService.verifyCode(user.getMfaSecret(), loginRequest.getMfaCode())) {
-                    user.incrementFailedLoginAttempts();
-                    userRepository.save(user);
+                
+                if (!mfaService.validateMfaCode(user.getMfaSecret(), request.getMfaCodeTrimmed())) {
+                    handleFailedLogin(user, "Code MFA invalide");
                     throw new BadCredentialsException("Code MFA invalide");
                 }
             }
 
-            // Réinitialiser les tentatives de connexion échouées
-            user.resetFailedLoginAttempts();
-            user.setLastLoginDate(LocalDateTime.now());
-            userRepository.save(user);
+            // Mise à jour des informations de connexion
+            updateUserLoginInfo(user, request);
 
-            // Générer les tokens
+            // Génération des tokens
             String accessToken = jwtService.generateAccessToken(user);
             String refreshToken = jwtService.generateRefreshToken(user);
 
-            // Créer la réponse
-            LoginResponse response = new LoginResponse(accessToken, refreshToken, jwtService.getAccessTokenExpiration());
-            populateUserInfo(response, user);
-            response.setMfaRequired(user.getMfaEnabled());
-            response.setMfaEnabled(user.getMfaEnabled());
-            response.setIsCompliant(user.isCompliant());
-            response.setSessionId(UUID.randomUUID().toString());
-            response.setDeviceId(loginRequest.getDeviceId());
-            response.setIpAddress(loginRequest.getIpAddress());
+            // Création de la réponse
+            LoginResponse response = createLoginResponse(user, accessToken, refreshToken);
 
-            // Auditer la connexion
-            auditService.logLogin(user, loginRequest.getIpAddress(), loginRequest.getUserAgent(), true, null);
+            // Audit de la connexion
+            auditService.logLogin(user, request.getClientIp(), request.getUserAgent(), true, null);
 
             return response;
 
-        } catch (BadCredentialsException | LockedException e) {
-            // Auditer l'échec de connexion
-            Optional<User> userOpt = findUserByIdentifier(loginRequest.getUsernameOrEmail());
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
-                user.incrementFailedLoginAttempts();
-                userRepository.save(user);
-                auditService.logLogin(user, loginRequest.getIpAddress(), loginRequest.getUserAgent(), false, e.getMessage());
-            }
+        } catch (AuthenticationException e) {
+            handleAuthenticationError(request, e);
             throw e;
+        } catch (Exception e) {
+            auditService.logLogin(null, request.getClientIp(), request.getUserAgent(), false, e.getMessage());
+            throw new RuntimeException("Erreur lors de l'authentification", e);
         }
     }
 
     /**
-     * Rafraîchit un token d'accès
+     * Déconnexion d'un utilisateur
+     */
+    public void logout(String token, String clientIp, String userAgent) {
+        try {
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+            }
+
+            // Invalidation du token
+            jwtService.invalidateToken(token);
+
+            // Récupération de l'utilisateur depuis le token
+            String username = jwtService.extractUsername(token);
+            if (username != null) {
+                Optional<User> userOpt = userRepository.findByUsername(username);
+                if (userOpt.isPresent()) {
+                    User user = userOpt.get();
+                    auditService.logLogout(user, clientIp, userAgent, true, null);
+                }
+            }
+
+        } catch (Exception e) {
+            auditService.logLogout(null, clientIp, userAgent, false, e.getMessage());
+            throw new RuntimeException("Erreur lors de la déconnexion", e);
+        }
+    }
+
+    /**
+     * Rafraîchissement d'un token
      */
     public LoginResponse refreshToken(String refreshToken) {
         try {
+            // Validation du refresh token
+            if (!jwtService.validateRefreshToken(refreshToken)) {
+                throw new BadCredentialsException("Refresh token invalide");
+            }
+
+            // Extraction des informations utilisateur
             String username = jwtService.extractUsername(refreshToken);
-            Optional<User> userOpt = userRepository.findByUsername(username);
-
-            if (userOpt.isEmpty() || !jwtService.isTokenValid(refreshToken, userOpt.get())) {
-                throw new BadCredentialsException("Token de rafraîchissement invalide");
+            User user = findUserByUsername(username);
+            if (user == null) {
+                throw new BadCredentialsException("Utilisateur non trouvé");
             }
 
-            User user = userOpt.get();
-            if (!user.isEnabled()) {
-                throw new BadCredentialsException("Compte inactif ou verrouillé");
-            }
+            // Vérification du statut du compte
+            validateUserAccount(user);
 
+            // Génération de nouveaux tokens
             String newAccessToken = jwtService.generateAccessToken(user);
             String newRefreshToken = jwtService.generateRefreshToken(user);
 
-            LoginResponse response = new LoginResponse(newAccessToken, newRefreshToken, jwtService.getAccessTokenExpiration());
-            populateUserInfo(response, user);
-            response.setMfaEnabled(user.getMfaEnabled());
-            response.setIsCompliant(user.isCompliant());
+            // Création de la réponse
+            LoginResponse response = createLoginResponse(user, newAccessToken, newRefreshToken);
+
+            // Audit
+            auditService.logTokenRefresh(user, true, null);
 
             return response;
 
         } catch (Exception e) {
-            throw new BadCredentialsException("Impossible de rafraîchir le token");
+            auditService.logTokenRefresh(null, false, e.getMessage());
+            throw new RuntimeException("Erreur lors du rafraîchissement du token", e);
         }
     }
 
     /**
-     * Déconnecte un utilisateur
+     * Validation d'un token d'accès
      */
-    public void logout(String accessToken, String ipAddress) {
+    public boolean validateToken(String token) {
         try {
-            String username = jwtService.extractUsername(accessToken);
-            Optional<User> userOpt = userRepository.findByUsername(username);
-
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
-                auditService.logLogout(user, ipAddress, true, null);
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
             }
 
-            // Invalider le token (ajouter à une liste noire si nécessaire)
-            jwtService.invalidateToken(accessToken);
+            if (!jwtService.validateAccessToken(token)) {
+                return false;
+            }
+
+            String username = jwtService.extractUsername(token);
+            User user = findUserByUsername(username);
+            
+            return user != null && user.getIsActive() && !user.getIsLocked();
 
         } catch (Exception e) {
-            // Log l'erreur mais ne pas la propager
-            auditService.logLogout(null, ipAddress, false, e.getMessage());
+            return false;
         }
     }
 
     /**
-     * Change le mot de passe d'un utilisateur
+     * Changement de mot de passe
      */
-    public void changePassword(String username, String currentPassword, String newPassword) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            throw new BadCredentialsException("Utilisateur non trouvé");
-        }
+    public void changePassword(UUID userId, String currentPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
 
-        User user = userOpt.get();
-
-        // Vérifier l'ancien mot de passe
+        // Vérification du mot de passe actuel
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new BadCredentialsException("Mot de passe actuel incorrect");
         }
 
-        // Vérifier que le nouveau mot de passe est différent
-        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
-            throw new BadCredentialsException("Le nouveau mot de passe doit être différent de l'actuel");
-        }
+        // Validation du nouveau mot de passe
+        validatePassword(newPassword);
 
-        // Encoder et sauvegarder le nouveau mot de passe
+        // Mise à jour du mot de passe
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setPasswordChangedDate(LocalDateTime.now());
+        user.setFailedLoginAttempts(0);
+        user.setIsLocked(false);
+
         userRepository.save(user);
 
-        // Auditer le changement de mot de passe
+        // Audit
         auditService.logPasswordChange(user, true, null);
     }
 
     /**
-     * Active ou désactive MFA pour un utilisateur
+     * Réinitialisation de mot de passe
      */
-    public void toggleMfa(String username, boolean enable) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            throw new BadCredentialsException("Utilisateur non trouvé");
-        }
+    public void resetPassword(String email) {
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
 
-        User user = userOpt.get();
-
-        if (enable && !user.getMfaEnabled()) {
-            // Activer MFA
-            String secret = mfaService.generateSecret();
-            user.setMfaSecret(secret);
-            user.setMfaEnabled(true);
-            user.setMfaBackupCodes(mfaService.generateBackupCodes());
-        } else if (!enable && user.getMfaEnabled()) {
-            // Désactiver MFA
-            user.setMfaSecret(null);
-            user.setMfaEnabled(false);
-            user.setMfaBackupCodes(null);
-        }
-
-        userRepository.save(user);
-        auditService.logMfaToggle(user, enable, true, null);
+        // Génération d'un token de réinitialisation
+        String resetToken = jwtService.generatePasswordResetToken(user);
+        
+        // TODO: Envoi d'email avec le token de réinitialisation
+        
+        // Audit
+        auditService.logPasswordResetRequest(user, true, null);
     }
 
     /**
-     * Vérifie un code MFA
+     * Confirmation de réinitialisation de mot de passe
      */
-    public boolean verifyMfaCode(String username, String code) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            return false;
-        }
+    public void confirmPasswordReset(String resetToken, String newPassword) {
+        try {
+            // Validation du token
+            if (!jwtService.validatePasswordResetToken(resetToken)) {
+                throw new BadCredentialsException("Token de réinitialisation invalide");
+            }
 
-        User user = userOpt.get();
-        if (!user.getMfaEnabled() || user.getMfaSecret() == null) {
-            return false;
-        }
+            String username = jwtService.extractUsername(resetToken);
+            User user = findUserByUsername(username);
+            if (user == null) {
+                throw new RuntimeException("Utilisateur non trouvé");
+            }
 
-        return mfaService.verifyCode(user.getMfaSecret(), code);
+            // Validation du nouveau mot de passe
+            validatePassword(newPassword);
+
+            // Mise à jour du mot de passe
+            user.setPasswordHash(passwordEncoder.encode(newPassword));
+            user.setPasswordChangedDate(LocalDateTime.now());
+            user.setFailedLoginAttempts(0);
+            user.setIsLocked(false);
+
+            userRepository.save(user);
+
+            // Invalidation du token
+            jwtService.invalidateToken(resetToken);
+
+            // Audit
+            auditService.logPasswordReset(user, true, null);
+
+        } catch (Exception e) {
+            auditService.logPasswordReset(null, false, e.getMessage());
+            throw new RuntimeException("Erreur lors de la réinitialisation du mot de passe", e);
+        }
     }
 
-    /**
-     * Trouve un utilisateur par son identifiant (username ou email)
-     */
-    private Optional<User> findUserByIdentifier(String identifier) {
-        // Essayer d'abord par username
-        Optional<User> user = userRepository.findByUsername(identifier);
-        if (user.isPresent()) {
-            return user;
+    // Méthodes privées utilitaires
+
+    private void validateLoginRequest(LoginRequest request) {
+        if (request.getUsernameOrEmailTrimmed() == null || request.getUsernameOrEmailTrimmed().trim().isEmpty()) {
+            throw new BadCredentialsException("Nom d'utilisateur ou email requis");
+        }
+        if (request.getPasswordTrimmed() == null || request.getPasswordTrimmed().trim().isEmpty()) {
+            throw new BadCredentialsException("Mot de passe requis");
+        }
+    }
+
+    private User findUserByUsernameOrEmail(String usernameOrEmail) {
+        // Essayer d'abord par nom d'utilisateur
+        Optional<User> userOpt = userRepository.findByUsername(usernameOrEmail);
+        if (userOpt.isPresent()) {
+            return userOpt.get();
         }
 
         // Essayer par email
-        return userRepository.findByEmail(identifier);
+        userOpt = userRepository.findByEmail(usernameOrEmail);
+        return userOpt.orElse(null);
     }
 
-    /**
-     * Remplit les informations utilisateur dans la réponse
-     */
-    private void populateUserInfo(LoginResponse response, User user) {
-        response.setUserId(user.getId().toString());
-        response.setUsername(user.getUsername());
-        response.setEmail(user.getEmail());
-        response.setFirstName(user.getFirstName());
-        response.setLastName(user.getLastName());
-        response.setFullName(user.getFullName());
-        response.setRoles(user.getRoles());
-        response.setPermissions(user.getPermissions());
+    private User findUserByUsername(String username) {
+        return userRepository.findByUsername(username).orElse(null);
+    }
+
+    private void validateUserAccount(User user) {
+        if (!user.getIsActive()) {
+            throw new LockedException("Compte désactivé");
+        }
+        if (user.getIsLocked()) {
+            throw new LockedException("Compte verrouillé");
+        }
+        if (!user.getKycStatus().isValid()) {
+            throw new LockedException("KYC non vérifié");
+        }
+        if (!user.getAmlStatus().isValid()) {
+            throw new LockedException("AML non vérifié");
+        }
+    }
+
+    private void updateUserLoginInfo(User user, LoginRequest request) {
+        user.setLastLoginDate(LocalDateTime.now());
+        user.setFailedLoginAttempts(0);
+        user.setIsLocked(false);
+        userRepository.save(user);
+    }
+
+    private LoginResponse createMfaRequiredResponse(User user) {
+        LoginResponse response = new LoginResponse(
+            user.getId(), 
+            user.getUsername(), 
+            user.getEmail(), 
+            user.getFirstName(), 
+            user.getLastName()
+        );
+        response.setMfaEnabled(true);
+        response.setMfaRequired(true);
+        response.setMessage("Code MFA requis");
+        return response;
+    }
+
+    private LoginResponse createLoginResponse(User user, String accessToken, String refreshToken) {
+        LoginResponse response = new LoginResponse(
+            user.getId(), 
+            user.getUsername(), 
+            user.getEmail(), 
+            user.getFirstName(), 
+            user.getLastName()
+        );
+
+        response.setAccessToken(accessToken);
+        response.setRefreshToken(refreshToken);
+        response.setExpiresIn(jwtService.getAccessTokenExpiration());
+        response.setExpiresAt(LocalDateTime.now().plusSeconds(jwtService.getAccessTokenExpiration()));
         response.setKycStatus(user.getKycStatus());
         response.setAmlStatus(user.getAmlStatus());
         response.setRiskScore(user.getRiskScore());
+        response.setMfaEnabled(user.getMfaEnabled());
+        response.setMfaRequired(false);
+        response.setPreferredLanguage(user.getPreferredLanguage());
+        response.setTimezone(user.getTimezone());
+        response.setLastLoginDate(user.getLastLoginDate());
+        response.setIsFirstLogin(user.getLastLoginDate() == null);
+        response.setSessionId(UUID.randomUUID().toString());
+        response.setMessage("Connexion réussie");
+
+        return response;
     }
 
-    /**
-     * Vérifie si un utilisateur peut effectuer des transferts
-     */
-    public boolean canUserTransfer(String username) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            return false;
+    private void handleAuthenticationError(LoginRequest request, AuthenticationException e) {
+        String usernameOrEmail = request.getUsernameOrEmailTrimmed();
+        User user = findUserByUsernameOrEmail(usernameOrEmail);
+        
+        if (user != null) {
+            handleFailedLogin(user, e.getMessage());
         }
-
-        User user = userOpt.get();
-        return user.isEnabled() && user.isCompliant() && !user.isHighRisk();
+        
+        auditService.logLogin(user, request.getClientIp(), request.getUserAgent(), false, e.getMessage());
     }
 
-    /**
-     * Vérifie les permissions d'un utilisateur
-     */
-    public boolean hasPermission(String username, String permission) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            return false;
+    private void handleFailedLogin(LoginRequest request, AuthenticationException e) {
+        String usernameOrEmail = request.getUsernameOrEmailTrimmed();
+        User user = findUserByUsernameOrEmail(usernameOrEmail);
+        
+        if (user != null) {
+            handleFailedLogin(user, e.getMessage());
         }
-
-        User user = userOpt.get();
-        return user.hasPermission(permission);
+        
+        auditService.logLogin(user, request.getClientIp(), request.getUserAgent(), false, e.getMessage());
     }
 
-    /**
-     * Vérifie les rôles d'un utilisateur
-     */
-    public boolean hasRole(String username, String role) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            return false;
-        }
-
-        User user = userOpt.get();
-        return user.hasRole(role);
-    }
-
-    /**
-     * Déverrouille un compte utilisateur
-     */
-    public void unlockAccount(String username) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            throw new BadCredentialsException("Utilisateur non trouvé");
-        }
-
-        User user = userOpt.get();
-        user.resetFailedLoginAttempts();
+    private void handleFailedLogin(User user, String reason) {
+        user.incrementFailedLoginAttempts();
         userRepository.save(user);
-
-        auditService.logAccountUnlock(user, true, null);
+        
+        auditService.logFailedLogin(user, reason);
     }
 
-    /**
-     * Active ou désactive un compte utilisateur
-     */
-    public void toggleAccountStatus(String username, boolean active) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            throw new BadCredentialsException("Utilisateur non trouvé");
+    private void validatePassword(String password) {
+        if (password == null || password.length() < 8) {
+            throw new IllegalArgumentException("Le mot de passe doit contenir au moins 8 caractères");
         }
-
-        User user = userOpt.get();
-        user.setIsActive(active);
-        if (!active) {
-            user.setIsLocked(true);
+        if (password.length() > 128) {
+            throw new IllegalArgumentException("Le mot de passe ne peut pas dépasser 128 caractères");
         }
-        userRepository.save(user);
-
-        auditService.logAccountStatusChange(user, active, true, null);
+        // TODO: Ajouter d'autres validations (complexité, caractères spéciaux, etc.)
     }
 }

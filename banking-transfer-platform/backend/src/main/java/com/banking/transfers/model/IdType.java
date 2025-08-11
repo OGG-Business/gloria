@@ -38,16 +38,15 @@ public enum IdType {
                 return idType;
             }
         }
-        throw new IllegalArgumentException("Type d'identité inconnu: " + code);
+        throw new IllegalArgumentException("Code d'identité invalide: " + code);
     }
 
-    public static boolean isValid(String code) {
-        for (IdType idType : values()) {
-            if (idType.code.equals(code)) {
-                return true;
-            }
+    public static IdType fromCodeOrDefault(String code, IdType defaultValue) {
+        try {
+            return fromCode(code);
+        } catch (IllegalArgumentException e) {
+            return defaultValue;
         }
-        return false;
     }
 
     public boolean isGovernmentIssued() {
