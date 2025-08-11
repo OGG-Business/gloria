@@ -1,30 +1,22 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
-import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext';
-import { NotificationProvider } from './contexts/NotificationContext';
-
-// Layouts
-import MainLayout from './layouts/MainLayout';
-import AuthLayout from './layouts/AuthLayout';
-
-// Pages
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
-import TransfersPage from './pages/TransfersPage';
-import AccountsPage from './pages/AccountsPage';
-import ProfilePage from './pages/ProfilePage';
-import KycPage from './pages/KycPage';
-import AdminPage from './pages/AdminPage';
-
-// Components
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminRoute from './components/AdminRoute';
-
-// Styles
-import './styles/global.css';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "react-query";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
+import MainLayout from "./layouts/MainLayout";
+import AuthLayout from "./layouts/AuthLayout";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import DashboardPage from "./pages/DashboardPage";
+import TransfersPage from "./pages/TransfersPage";
+import AccountsPage from "./pages/AccountsPage";
+import ProfilePage from "./pages/ProfilePage";
+import KycPage from "./pages/KycPage";
+import AdminPage from "./pages/AdminPage";
+import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
+import "./styles/global.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,7 +36,6 @@ function App() {
             <Router>
               <div className="App">
                 <Routes>
-                  {/* Public routes */}
                   <Route path="/login" element={
                     <AuthLayout>
                       <LoginPage />
@@ -55,8 +46,6 @@ function App() {
                       <RegisterPage />
                     </AuthLayout>
                   } />
-
-                  {/* Protected routes */}
                   <Route path="/dashboard" element={
                     <ProtectedRoute>
                       <MainLayout>
@@ -92,8 +81,6 @@ function App() {
                       </MainLayout>
                     </ProtectedRoute>
                   } />
-
-                  {/* Admin routes */}
                   <Route path="/admin" element={
                     <AdminRoute>
                       <MainLayout>
@@ -101,8 +88,6 @@ function App() {
                       </MainLayout>
                     </AdminRoute>
                   } />
-
-                  {/* Default redirect */}
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
