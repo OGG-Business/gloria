@@ -1,0 +1,68 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+      OIDC_ISSUER_URL: http://keycloak:8080/realms/payments
+      OIDC_AUDIENCE: payments-api
+      CONNECTOR_SWIFT_MODE: dry-run
+    volumes:
+      - ./certs:/certs:ro
+      - ./secrets:/secrets:ro
+    ports:
+      - "8443:8443"
+    depends_on:
+      - db
+      - keycloak
+  frontend:
+    image: node:20
+    working_dir: /app
+    command: bash -lc "npm install && npm run dev"
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "4443:4443"
+    environment:
+      - NODE_OPTIONS=--openssl-legacy-provider
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --http-port 8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8444:8080"
+  vault:
+    image: hashicorp/vault:1.15
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3000:3000"
+volumes:
+  dbdata:
