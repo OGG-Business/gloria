@@ -1,0 +1,92 @@
+spring:
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/banking_transfers_dev
+    username: postgres
+    password: password
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  redis:
+    host: localhost
+    port: 6379
+    password: 
+  kafka:
+    bootstrap-servers: localhost:9092
+  vault:
+    host: localhost
+    port: 8200
+    scheme: http
+    authentication: TOKEN
+    token: dev-token
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.banking.transfers: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.data.jpa: DEBUG
+    org.springframework.transaction: DEBUG
+
+jwt:
+  secret: dev-secret-key-for-development-only-change-in-production
+  expiration: 86400
+  refresh-expiration: 604800
+
+keycloak:
+  auth-server-url: http://localhost:8081
+  realm: banking-transfer
+  client-id: banking-transfer-client
+  client-secret: client-secret
+
+swift:
+  enabled: false
+  test-mode: true
+  endpoint: https://test.swift.com
+
+mojaloop:
+  enabled: false
+  test-mode: true
+  endpoint: https://test.mojaloop.io
+
+security:
+  mfa:
+    enabled: true
+    required-for-admin: false
+  ip-blocking:
+    enabled: false
+
+kyc:
+  auto-verification:
+    enabled: false
+  sanctions-screening:
+    enabled: false
+
+transfer:
+  limits:
+    daily: 100000
+    monthly: 1000000
+    single: 50000
+
+notification:
+  email:
+    enabled: false
+  sms:
+    enabled: false
+
+audit:
+  enabled: true
+  retention-days: 30
+
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000

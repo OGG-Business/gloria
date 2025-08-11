@@ -1,0 +1,61 @@
+apiVersion: v2
+name: banking-transfer-platform
+description: A complete banking transfer platform with SWIFT and IBAN support
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - banking
+  - transfers
+  - swift
+  - iban
+  - payments
+home: https://github.com/banking-transfer-platform
+sources:
+  - https://github.com/banking-transfer-platform
+maintainers:
+  - name: Banking Transfer Platform Team
+    email: team@banking-transfer-platform.com
+icon: https://raw.githubusercontent.com/banking-transfer-platform/logo.png
+
+dependencies:
+  - name: postgresql
+    version: 12.5.6
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: 17.3.2
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: kafka
+    version: 21.6.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: kafka.enabled
+  - name: vault
+    version: 0.24.0
+    repository: https://helm.releases.hashicorp.com
+    condition: vault.enabled
+  - name: keycloak
+    version: 18.0.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: keycloak.enabled
+  - name: prometheus
+    version: 25.8.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+  - name: grafana
+    version: 7.0.17
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+  - name: elasticsearch
+    version: 8.5.1
+    repository: https://helm.elastic.co
+    condition: elasticsearch.enabled
+  - name: kibana
+    version: 8.5.1
+    repository: https://helm.elastic.co
+    condition: kibana.enabled
+  - name: logstash
+    version: 8.5.1
+    repository: https://helm.elastic.co
+    condition: logstash.enabled

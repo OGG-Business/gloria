@@ -1,0 +1,71 @@
+spring:
+  # Configuration de test
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  
+  flyway:
+    enabled: false
+  
+  redis:
+    host: localhost
+    port: 6379
+    password: redis_password
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# Configuration du serveur pour test
+server:
+  port: 0 # Port aléatoire pour éviter les conflits
+
+# Configuration du logging pour test
+logging:
+  level:
+    com.banking.transfers: WARN
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+# Configuration JWT pour test
+jwt:
+  secret: test-secret-key
+  expiration: 3600000
+
+# Configuration Keycloak pour test
+keycloak:
+  auth-server-url: http://localhost:8081
+  realm: banking
+  client-id: banking-client
+  client-secret: client-secret
+
+# Configuration SWIFT pour test
+swift:
+  enabled: false
+  test-mode: true
+
+# Configuration Mojaloop pour test
+mojaloop:
+  enabled: false
+  test-mode: true
+
+# Configuration de sécurité pour test
+security:
+  ip-blocking:
+    enabled: false
+
+# Configuration KYC pour test
+kyc:
+  auto-verification:
+    enabled: true
+  sanctions-screening:
+    enabled: false

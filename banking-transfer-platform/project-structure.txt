@@ -1,0 +1,225 @@
+banking-transfer-platform/
+├── README.md
+├── LICENSE
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── .env.example
+├── .gitignore
+├── docker-compose.yml
+├── docker-compose.prod.yml
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       ├── security-scan.yml
+│       └── deploy.yml
+├── backend/
+│   ├── pom.xml
+│   ├── Dockerfile
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── com/
+│   │   │   │       └── banking/
+│   │   │   │           └── transfers/
+│   │   │   │               ├── BankingTransferApplication.java
+│   │   │   │               ├── config/
+│   │   │   │               │   ├── SecurityConfig.java
+│   │   │   │               │   ├── SwaggerConfig.java
+│   │   │   │               │   ├── KafkaConfig.java
+│   │   │   │               │   └── VaultConfig.java
+│   │   │   │               ├── controller/
+│   │   │   │               │   ├── AuthController.java
+│   │   │   │               │   ├── AccountController.java
+│   │   │   │               │   ├── TransferController.java
+│   │   │   │               │   ├── KYCController.java
+│   │   │   │               │   └── AdminController.java
+│   │   │   │               ├── service/
+│   │   │   │               │   ├── AuthService.java
+│   │   │   │               │   ├── AccountService.java
+│   │   │   │               │   ├── TransferService.java
+│   │   │   │               │   ├── KYCService.java
+│   │   │   │               │   ├── NotificationService.java
+│   │   │   │               │   └── AuditService.java
+│   │   │   │               ├── repository/
+│   │   │   │               │   ├── AccountRepository.java
+│   │   │   │               │   ├── TransferRepository.java
+│   │   │   │               │   ├── EventRepository.java
+│   │   │   │               │   └── AuditRepository.java
+│   │   │   │               ├── model/
+│   │   │   │               │   ├── Account.java
+│   │   │   │               │   ├── Transfer.java
+│   │   │   │               │   ├── TransferEvent.java
+│   │   │   │               │   ├── User.java
+│   │   │   │               │   └── AuditLog.java
+│   │   │   │               ├── dto/
+│   │   │   │               │   ├── TransferRequest.java
+│   │   │   │               │   ├── TransferResponse.java
+│   │   │   │               │   └── AccountResponse.java
+│   │   │   │               ├── connector/
+│   │   │   │               │   ├── SwiftConnector.java
+│   │   │   │               │   ├── MojaloopConnector.java
+│   │   │   │               │   └── ConnectorFactory.java
+│   │   │   │               ├── validator/
+│   │   │   │               │   ├── IBANValidator.java
+│   │   │   │               │   ├── BICValidator.java
+│   │   │   │               │   └── TransferValidator.java
+│   │   │   │               ├── security/
+│   │   │   │               │   ├── EncryptionService.java
+│   │   │   │               │   ├── JWTService.java
+│   │   │   │               │   └── VaultService.java
+│   │   │   │               └── exception/
+│   │   │   │                   ├── TransferException.java
+│   │   │   │                   ├── ValidationException.java
+│   │   │   │                   └── GlobalExceptionHandler.java
+│   │   │   └── resources/
+│   │   │       ├── application.yml
+│   │   │       ├── application-dev.yml
+│   │   │       ├── application-prod.yml
+│   │   │       ├── db/
+│   │   │       │   └── migration/
+│   │   │       │       ├── V1__Create_initial_schema.sql
+│   │   │       │       ├── V2__Add_transfer_events.sql
+│   │   │       │       └── V3__Add_audit_logs.sql
+│   │   │       └── swift/
+│   │   │           ├── iso20022/
+│   │   │           │   ├── pacs.008.xml
+│   │   │           │   ├── pacs.002.xml
+│   │   │           │   └── pacs.004.xml
+│   │   │           └── mt/
+│   │   │               ├── MT103.xml
+│   │   │               └── MT202.xml
+│   │   └── test/
+│   │       ├── java/
+│   │       │   └── com/
+│   │       │       └── banking/
+│   │       │           └── transfers/
+│   │       │               ├── controller/
+│   │       │               ├── service/
+│   │       │               └── integration/
+│   │       └── resources/
+│   │           ├── application-test.yml
+│   │           └── test-data/
+├── frontend/
+│   ├── package.json
+│   ├── Dockerfile
+│   ├── public/
+│   │   ├── index.html
+│   │   ├── manifest.json
+│   │   └── icons/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── index.tsx
+│   │   ├── components/
+│   │   │   ├── common/
+│   │   │   │   ├── Header.tsx
+│   │   │   │   ├── Footer.tsx
+│   │   │   │   ├── Loading.tsx
+│   │   │   │   └── ErrorBoundary.tsx
+│   │   │   ├── auth/
+│   │   │   │   ├── Login.tsx
+│   │   │   │   └── Register.tsx
+│   │   │   ├── transfer/
+│   │   │   │   ├── TransferForm.tsx
+│   │   │   │   ├── TransferList.tsx
+│   │   │   │   ├── TransferDetails.tsx
+│   │   │   │   └── TransferTimeline.tsx
+│   │   │   ├── account/
+│   │   │   │   ├── AccountList.tsx
+│   │   │   │   └── AccountDetails.tsx
+│   │   │   ├── dashboard/
+│   │   │   │   ├── Dashboard.tsx
+│   │   │   │   ├── Metrics.tsx
+│   │   │   │   └── Charts.tsx
+│   │   │   └── admin/
+│   │   │       ├── AdminDashboard.tsx
+│   │   │       ├── UserManagement.tsx
+│   │   │       └── SystemLogs.tsx
+│   │   ├── hooks/
+│   │   │   ├── useAuth.ts
+│   │   │   ├── useTransfers.ts
+│   │   │   └── useWebSocket.ts
+│   │   ├── services/
+│   │   │   ├── api.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── transfers.ts
+│   │   │   └── notifications.ts
+│   │   ├── utils/
+│   │   │   ├── validation.ts
+│   │   │   ├── formatters.ts
+│   │   │   └── constants.ts
+│   │   ├── types/
+│   │   │   ├── transfer.ts
+│   │   │   ├── account.ts
+│   │   │   └── user.ts
+│   │   └── styles/
+│   │       ├── globals.css
+│   │       ├── components.css
+│   │       └── variables.css
+│   └── tests/
+│       ├── components/
+│       └── utils/
+├── infrastructure/
+│   ├── kubernetes/
+│   │   ├── namespace.yaml
+│   │   ├── configmap.yaml
+│   │   ├── secret.yaml
+│   │   ├── deployment/
+│   │   │   ├── backend.yaml
+│   │   │   ├── frontend.yaml
+│   │   │   ├── postgres.yaml
+│   │   │   ├── redis.yaml
+│   │   │   ├── kafka.yaml
+│   │   │   └── vault.yaml
+│   │   ├── service/
+│   │   │   ├── backend-service.yaml
+│   │   │   ├── frontend-service.yaml
+│   │   │   └── database-service.yaml
+│   │   └── ingress/
+│   │       └── ingress.yaml
+│   ├── helm/
+│   │   └── banking-transfers/
+│   │       ├── Chart.yaml
+│   │       ├── values.yaml
+│   │       ├── templates/
+│   │       │   ├── deployment.yaml
+│   │       │   ├── service.yaml
+│   │       │   ├── ingress.yaml
+│   │       │   └── configmap.yaml
+│   │       └── charts/
+│   └── terraform/
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── modules/
+│       │   ├── gke/
+│       │   ├── cloud-sql/
+│       │   └── monitoring/
+│       └── environments/
+│           ├── dev/
+│           ├── staging/
+│           └── prod/
+├── scripts/
+│   ├── setup.sh
+│   ├── deploy.sh
+│   ├── backup.sh
+│   ├── security-scan.sh
+│   ├── swift-test.sh
+│   └── load-test.sh
+├── docs/
+│   ├── INSTALLATION.md
+│   ├── ONBOARDING_SWIFT.md
+│   ├── API.md
+│   ├── ARCHITECTURE.md
+│   ├── SECURITY.md
+│   ├── DEPLOYMENT.md
+│   └── TROUBLESHOOTING.md
+├── openapi/
+│   └── openapi.yaml
+└── data/
+    ├── sample/
+    │   ├── accounts.json
+    │   ├── transfers.json
+    │   └── users.json
+    └── test/
+        ├── swift-messages/
+        └── iso20022-messages/
