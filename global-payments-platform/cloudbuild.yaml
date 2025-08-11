@@ -1,0 +1,37 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+substitutions:
+  _REGION: europe-west1
+  _SERVICE: gpp-backend
+  _REPO: gcr.io/$PROJECT_ID/gpp-backend
+  _FRONTEND_BUCKET: gpp-frontend-$PROJECT_ID
+
+steps:
+  - id: Build backend image
+    name: gcr.io/cloud-builders/docker
+    args: ["build","-t","$_REPO:latest","-f","backend-spring/Dockerfile","."]
+
+  - id: Push backend image
+    name: gcr.io/cloud-builders/docker
+    args: ["push","$_REPO:latest"]
+
+  - id: Deploy to Cloud Run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args: ["run","deploy","$_SERVICE","--image","$_REPO:latest","--region","$_REGION","--platform","managed","--allow-unauthenticated","--set-env-vars","SPRING_PROFILES_ACTIVE=prod"]
+
+  - id: Build frontend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -lc
+      - |
+        cd frontend
+        npm ci || npm install
+        npm run build
+        gsutil -m rsync -r dist gs://$_FRONTEND_BUCKET
+        gsutil web set -m index.html -e index.html gs://$_FRONTEND_BUCKET
+        gsutil iam ch allUsers:objectViewer gs://$_FRONTEND_BUCKET
+
+images:
+  - "$_REPO:latest"

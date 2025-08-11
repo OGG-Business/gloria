@@ -1,0 +1,21 @@
+runtime: java17
+instance_class: F2
+
+handlers:
+  - url: /.*/
+    script: auto
+    secure: always
+
+env_variables:
+  SPRING_PROFILES_ACTIVE: prod
+  CLOUDSQL_INSTANCE: your-project:region:instance
+  DB_USER: app
+  DB_PASSWORD: ${sm://projects/YOUR_PROJECT/secrets/DB_PASSWORD/versions/latest}
+
+network:
+  session_affinity: false
+automatic_scaling:
+  max_instances: 3
+  min_instances: 0
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.7
