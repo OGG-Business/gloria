@@ -1,7 +1,8 @@
 """
-Modèles KYC/AML pour la conformité
+KYC models for Banking Transfer Platform
 """
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Enum, JSON, Float
+
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Integer, Text, Float, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -9,9 +10,15 @@ import enum
 
 from app.common.database import Base
 
+class KYCStatus(enum.Enum):
+    """KYC status"""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    UNDER_REVIEW = "under_review"
 
-class DocumentType(str, enum.Enum):
-    """Types de documents KYC"""
+class DocumentType(enum.Enum):
+    """Document types"""
     PASSPORT = "passport"
     NATIONAL_ID = "national_id"
     DRIVERS_LICENSE = "drivers_license"
@@ -19,241 +26,98 @@ class DocumentType(str, enum.Enum):
     BANK_STATEMENT = "bank_statement"
     PROOF_OF_ADDRESS = "proof_of_address"
     PROOF_OF_INCOME = "proof_of_income"
-    BUSINESS_LICENSE = "business_license"
-    ARTICLES_OF_INCORPORATION = "articles_of_incorporation"
-
-
-class DocumentStatus(str, enum.Enum):
-    """Statuts des documents"""
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    EXPIRED = "expired"
-
-
-class KYCCheckType(str, enum.Enum):
-    """Types de vérifications KYC"""
-    IDENTITY_VERIFICATION = "identity_verification"
-    ADDRESS_VERIFICATION = "address_verification"
-    SANCTIONS_SCREENING = "sanctions_screening"
-    PEP_SCREENING = "pep_screening"
-    ADVERSE_MEDIA = "adverse_media"
-    CREDIT_CHECK = "credit_check"
-
-
-class KYCCheckStatus(str, enum.Enum):
-    """Statuts des vérifications KYC"""
-    PENDING = "pending"
-    PASSED = "passed"
-    FAILED = "failed"
-    MANUAL_REVIEW = "manual_review"
-
-
-class RiskLevel(str, enum.Enum):
-    """Niveaux de risque"""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
 
 class KYCDocument(Base):
-    """Documents KYC"""
+    """KYC document model"""
     __tablename__ = "kyc_documents"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Type et statut
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     document_type = Column(Enum(DocumentType), nullable=False)
-    status = Column(Enum(DocumentStatus), nullable=False, default=DocumentStatus.PENDING)
-    
-    # Informations du document
-    document_number = Column(String(100), nullable=True)
-    issuing_country = Column(String(3), nullable=True)  # Code pays ISO
-    issuing_date = Column(DateTime, nullable=True)
-    expiry_date = Column(DateTime, nullable=True)
-    
-    # Fichiers
     file_path = Column(String(500), nullable=False)
     file_name = Column(String(255), nullable=False)
-    file_size = Column(Integer, nullable=True)
-    mime_type = Column(String(100), nullable=True)
-    
-    # Vérification
+    file_size = Column(Integer, nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    status = Column(Enum(KYCStatus), default=KYCStatus.PENDING, nullable=False)
     verified_at = Column(DateTime(timezone=True), nullable=True)
-    verified_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    verification_notes = Column(Text, nullable=True)
+    verified_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relations
+    # Relationships
     user = relationship("User", back_populates="kyc_documents")
-    verifier = relationship("User", foreign_keys=[verified_by])
     
     def __repr__(self):
-        return f"<KYCDocument(id={self.id}, user_id={self.user_id}, type='{self.document_type}')>"
-    
-    @property
-    def is_expired(self) -> bool:
-        """Vérifie si le document est expiré"""
-        if self.expiry_date:
-            return datetime.utcnow() > self.expiry_date
-        return False
-    
-    @property
-    def is_valid(self) -> bool:
-        """Vérifie si le document est valide"""
-        return self.status == DocumentStatus.APPROVED and not self.is_expired
-
+        return f"<KYCDocument(id={self.id}, type={self.document_type}, status={self.status})>"
 
 class KYCCheck(Base):
-    """Vérifications KYC"""
+    """KYC check model"""
     __tablename__ = "kyc_checks"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Type et statut
-    check_type = Column(Enum(KYCCheckType), nullable=False)
-    status = Column(Enum(KYCCheckStatus), nullable=False, default=KYCCheckStatus.PENDING)
-    risk_level = Column(Enum(RiskLevel), nullable=True)
-    
-    # Résultats
-    score = Column(Float, nullable=True)  # Score de risque 0-100
-    details = Column(JSON, nullable=True)  # Détails de la vérification
-    flags = Column(JSON, nullable=True)  # Alertes détectées
-    
-    # Références externes
-    external_check_id = Column(String(100), nullable=True)
-    provider = Column(String(100), nullable=True)  # Fournisseur de vérification
-    
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    
-    # Relations
-    user = relationship("User")
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    check_type = Column(String(50), nullable=False)  # sanctions, pep, aml, etc.
+    status = Column(Enum(KYCStatus), default=KYCStatus.PENDING, nullable=False)
+    result = Column(Text, nullable=True)  # JSON result
+    risk_score = Column(Float, default=0.0, nullable=False)
+    performed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
     
     def __repr__(self):
-        return f"<KYCCheck(id={self.id}, user_id={self.user_id}, type='{self.check_type}')>"
-    
-    @property
-    def is_completed(self) -> bool:
-        """Vérifie si la vérification est terminée"""
-        return self.status in [KYCCheckStatus.PASSED, KYCCheckStatus.FAILED, KYCCheckStatus.MANUAL_REVIEW]
-
+        return f"<KYCCheck(id={self.id}, type={self.check_type}, status={self.status})>"
 
 class SanctionsMatch(Base):
-    """Correspondances avec les listes de sanctions"""
+    """Sanctions match model"""
     __tablename__ = "sanctions_matches"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Informations de la correspondance
-    list_name = Column(String(255), nullable=False)  # Nom de la liste
-    entity_name = Column(String(255), nullable=False)  # Nom de l'entité dans la liste
-    match_score = Column(Float, nullable=False)  # Score de correspondance 0-100
-    
-    # Détails
-    entity_type = Column(String(50), nullable=True)  # individual, organization, vessel, etc.
-    country = Column(String(3), nullable=True)  # Code pays
-    date_of_birth = Column(DateTime, nullable=True)
-    nationality = Column(String(3), nullable=True)
-    
-    # Références
-    external_id = Column(String(100), nullable=True)
-    source_url = Column(String(500), nullable=True)
-    
-    # Statut
-    is_false_positive = Column(Boolean, default=False)
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    sanctions_list = Column(String(100), nullable=False)  # OFAC, UN, EU, etc.
+    matched_name = Column(String(255), nullable=False)
+    match_score = Column(Float, nullable=False)
+    match_details = Column(Text, nullable=True)  # JSON details
+    is_false_positive = Column(Boolean, default=False, nullable=False)
+    reviewed_by = Column(String(36), ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    review_notes = Column(Text, nullable=True)
-    
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relations
-    user = relationship("User")
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
     def __repr__(self):
-        return f"<SanctionsMatch(id={self.id}, user_id={self.user_id}, list='{self.list_name}')>"
-
+        return f"<SanctionsMatch(id={self.id}, user_id={self.user_id}, score={self.match_score})>"
 
 class PEPMatch(Base):
-    """Correspondances avec les Personnes Politiquement Exposées"""
+    """PEP match model"""
     __tablename__ = "pep_matches"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Informations PEP
-    person_name = Column(String(255), nullable=False)
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    pep_name = Column(String(255), nullable=False)
     position = Column(String(255), nullable=True)
-    organization = Column(String(255), nullable=True)
     country = Column(String(3), nullable=True)
-    
-    # Détails
     match_score = Column(Float, nullable=False)
-    risk_level = Column(Enum(RiskLevel), nullable=True)
-    
-    # Dates
-    start_date = Column(DateTime, nullable=True)
-    end_date = Column(DateTime, nullable=True)
-    
-    # Références
-    external_id = Column(String(100), nullable=True)
-    source_url = Column(String(500), nullable=True)
-    
-    # Statut
-    is_false_positive = Column(Boolean, default=False)
+    match_details = Column(Text, nullable=True)  # JSON details
+    is_false_positive = Column(Boolean, default=False, nullable=False)
+    reviewed_by = Column(String(36), ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relations
-    user = relationship("User")
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
     def __repr__(self):
-        return f"<PEPMatch(id={self.id}, user_id={self.user_id}, person='{self.person_name}')>"
-
+        return f"<PEPMatch(id={self.id}, user_id={self.user_id}, name={self.pep_name})>"
 
 class KYCPolicy(Base):
-    """Politiques KYC configurables"""
+    """KYC policy model"""
     __tablename__ = "kyc_policies"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String(36), primary_key=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    
-    # Limites de montant
-    max_transfer_amount = Column(Float, nullable=False, default=10000.0)
-    max_daily_amount = Column(Float, nullable=False, default=50000.0)
-    max_monthly_amount = Column(Float, nullable=False, default=200000.0)
-    
-    # Seuils de vérification
-    enhanced_due_diligence_threshold = Column(Float, nullable=False, default=5000.0)
-    manual_review_threshold = Column(Float, nullable=False, default=10000.0)
-    
-    # Vérifications requises
-    required_documents = Column(JSON, nullable=True)  # Liste des types de documents requis
-    required_checks = Column(JSON, nullable=True)  # Liste des vérifications requises
-    
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
+    risk_threshold = Column(Float, default=0.7, nullable=False)
+    auto_approve_below = Column(Float, default=0.3, nullable=False)
+    auto_reject_above = Column(Float, default=0.8, nullable=False)
+    requires_manual_review = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     
     def __repr__(self):
-        return f"<KYCPolicy(id={self.id}, name='{self.name}')>"
+        return f"<KYCPolicy(id={self.id}, name={self.name})>"

@@ -1,58 +1,47 @@
-# Dockerfile pour Banking Transfer Platform Backend
+# Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Définir les variables d'environnement
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-# Créer l'utilisateur non-root
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-# Installer les dépendances système
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    libpq-dev \
-    libssl-dev \
-    libffi-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Définir le répertoire de travail
+# Set work directory
 WORKDIR /app
 
-# Copier les fichiers de dépendances
+# Install system dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        libpq-dev \
+        gcc \
+        g++ \
+        make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Installer les dépendances Python
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copier le code source
+# Copy project
 COPY . .
 
-# Créer les répertoires nécessaires
-RUN mkdir -p /app/logs /app/uploads /app/temp
+# Create necessary directories
+RUN mkdir -p /app/logs /app/uploads /app/certs
 
-# Changer les permissions
-RUN chown -R appuser:appuser /app
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
 
-# Passer à l'utilisateur non-root
-USER appuser
-
-# Exposer le port
+# Expose port
 EXPOSE 8000
 
-# Variables d'environnement par défaut
-ENV HOST=0.0.0.0 \
-    PORT=8000 \
-    WORKERS=1 \
-    LOG_LEVEL=INFO
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Script de démarrage
-COPY scripts/start.sh /start.sh
-RUN chmod +x /start.sh
-
-# Point d'entrée
-ENTRYPOINT ["/start.sh"]
+# Run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

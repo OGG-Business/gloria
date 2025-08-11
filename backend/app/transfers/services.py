@@ -1,136 +1,144 @@
 """
-Transfer Service
-Handles transfer business logic and operations
+Transfer service for Banking Transfer Platform
 """
 
-import logging
 import uuid
+import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc, func
+from sqlalchemy import and_, or_, desc
+import structlog
 
-from app.transfers.models import Transfer, TransferEvent, TransferStatus, TransferPriority, TransferType
+from app.transfers.models import Transfer, TransferEvent, TransferStatus, TransferType, TransferPriority
 from app.accounts.models import Account, AccountActivity
 from app.auth.models import User
-from app.common.exceptions import TransferError, InsufficientFundsError, ValidationError
 from app.connectors.swift_connector import create_swift_connector
 from app.connectors.mojaloop_connector import create_mojaloop_connector
 from app.connectors.iso20022_connector import create_iso20022_connector
 from app.common.monitoring import record_transfer
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 class TransferService:
-    """Service for managing transfers"""
+    """Service for handling transfer operations"""
     
     def __init__(self, db: Session):
         self.db = db
     
-    async def create_transfer(self, user_id: str, transfer_data: Dict[str, Any]) -> Transfer:
+    async def create_transfer(self, transfer_data: dict, user: User) -> Transfer:
         """Create a new transfer"""
         try:
-            # Validate source account
+            # Validate transfer data
+            validation_result = await self.validate_transfer(transfer_data, user)
+            if not validation_result["valid"]:
+                raise ValueError(f"Transfer validation failed: {validation_result['errors']}")
+            
+            # Get source account
             source_account = self.db.query(Account).filter(
                 and_(
-                    Account.id == transfer_data['source_account_id'],
-                    Account.user_id == user_id,
-                    Account.status == 'active'
+                    Account.id == transfer_data["source_account_id"],
+                    Account.user_id == user.id,
+                    Account.status == "active"
                 )
             ).first()
             
             if not source_account:
-                raise ValidationError("Invalid source account")
+                raise ValueError("Source account not found or not active")
             
-            # Validate amount and limits
-            amount = transfer_data['amount']
-            if amount <= 0:
-                raise ValidationError("Amount must be positive")
-            
-            if amount > source_account.balance:
-                raise InsufficientFundsError(f"Insufficient funds. Available: ${source_account.balance}")
-            
-            if amount > source_account.daily_limit:
-                raise ValidationError(f"Amount exceeds daily limit of ${source_account.daily_limit}")
-            
-            # Check monthly limit
-            monthly_transfers = self.db.query(func.sum(Transfer.amount)).filter(
-                and_(
-                    Transfer.source_account_id == source_account.id,
-                    Transfer.created_at >= datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                )
-            ).scalar() or 0
-            
-            if monthly_transfers + amount > source_account.monthly_limit:
-                raise ValidationError(f"Amount would exceed monthly limit of ${source_account.monthly_limit}")
-            
-            # Generate transfer ID
-            transfer_id = f"TRF{datetime.now().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
-            
-            # Calculate fees
-            fees = self._calculate_fees(amount, transfer_data['transfer_type'], transfer_data['priority'])
+            # Check sufficient funds
+            total_amount = transfer_data["amount"] + validation_result["estimated_fees"]
+            if source_account.available_balance < total_amount:
+                raise ValueError(f"Insufficient funds. Available: {source_account.available_balance}, Required: {total_amount}")
             
             # Create transfer
+            transfer_id = f"TRF{datetime.now().strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4())[:8].upper()}"
+            
             transfer = Transfer(
                 id=str(uuid.uuid4()),
                 transfer_id=transfer_id,
-                amount=amount,
-                currency=transfer_data['currency'],
+                amount=transfer_data["amount"],
+                currency=transfer_data["currency"],
+                fees=validation_result["estimated_fees"],
+                total_amount=total_amount,
                 source_account_id=source_account.id,
-                destination_account_id=None,  # Will be set when destination account is found
-                beneficiary_name=transfer_data['beneficiary_name'],
-                beneficiary_iban=transfer_data['beneficiary_iban'],
-                beneficiary_bic=transfer_data['beneficiary_bic'],
-                description=transfer_data['description'],
+                destination_account_id=transfer_data.get("destination_account_id"),
+                beneficiary_name=transfer_data["beneficiary_name"],
+                beneficiary_iban=transfer_data.get("beneficiary_iban"),
+                beneficiary_bic=transfer_data.get("beneficiary_bic"),
+                beneficiary_bank=transfer_data.get("beneficiary_bank"),
+                beneficiary_country=transfer_data.get("beneficiary_country"),
+                description=transfer_data.get("description"),
+                reference=transfer_data.get("reference"),
+                transfer_type=TransferType(transfer_data["transfer_type"]),
                 status=TransferStatus.INITIATED,
-                priority=transfer_data['priority'],
-                transfer_type=transfer_data['transfer_type'],
-                fees=fees,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc)
+                priority=TransferPriority(transfer_data.get("priority", "normal")),
+                created_at=datetime.now(timezone.utc)
             )
-            
-            self.db.add(transfer)
-            self.db.flush()  # Get the ID
             
             # Block amount from source account
-            source_account.block_amount(amount)
+            if not source_account.block_amount(total_amount):
+                raise ValueError("Failed to block amount from source account")
+            
+            # Save transfer
+            self.db.add(transfer)
+            self.db.commit()
+            self.db.refresh(transfer)
             
             # Create initial event
-            event = TransferEvent(
-                id=str(uuid.uuid4()),
-                transfer_id=transfer.id,
-                event_type="transfer_initiated",
-                status=TransferStatus.INITIATED,
-                message="Transfer initiated",
-                timestamp=datetime.now(timezone.utc),
-                metadata={
-                    "amount": amount,
-                    "currency": transfer_data['currency'],
-                    "fees": fees
-                }
+            await self._create_transfer_event(
+                transfer.id,
+                "initiated",
+                TransferStatus.INITIATED,
+                "Transfer initiated"
             )
             
-            self.db.add(event)
-            self.db.commit()
-            
             # Record metrics
-            record_transfer("created", "success")
+            record_transfer(
+                status=transfer.status.value,
+                currency=transfer.currency,
+                amount=transfer.amount,
+                transfer_type=transfer.transfer_type.value
+            )
             
             # Process transfer asynchronously
-            await self._process_transfer(transfer)
+            asyncio.create_task(self._process_transfer(transfer.id))
+            
+            logger.info(
+                "Transfer created successfully",
+                transfer_id=transfer.transfer_id,
+                user_id=user.id,
+                amount=transfer.amount,
+                currency=transfer.currency
+            )
             
             return transfer
             
         except Exception as e:
             self.db.rollback()
             logger.error(f"Failed to create transfer: {e}")
-            record_transfer("created", "failed")
             raise
     
-    async def _process_transfer(self, transfer: Transfer) -> None:
-        """Process transfer based on type"""
+    async def _process_transfer(self, transfer_id: str):
+        """Process transfer through appropriate connector"""
         try:
+            transfer = self.db.query(Transfer).filter(Transfer.id == transfer_id).first()
+            if not transfer:
+                logger.error(f"Transfer {transfer_id} not found for processing")
+                return
+            
+            # Update status to processing
+            transfer.status = TransferStatus.PROCESSING
+            self.db.commit()
+            
+            await self._create_transfer_event(
+                transfer.id,
+                "processing",
+                TransferStatus.PROCESSING,
+                "Transfer processing started"
+            )
+            
+            # Process based on transfer type
             if transfer.transfer_type == TransferType.SWIFT:
                 await self._process_swift_transfer(transfer)
             elif transfer.transfer_type == TransferType.MOJALOOP:
@@ -138,390 +146,348 @@ class TransferService:
             elif transfer.transfer_type == TransferType.IBAN:
                 await self._process_iban_transfer(transfer)
             else:
-                raise TransferError(f"Unsupported transfer type: {transfer.transfer_type}")
+                await self._process_internal_transfer(transfer)
                 
         except Exception as e:
-            logger.error(f"Failed to process transfer {transfer.transfer_id}: {e}")
-            await self._fail_transfer(transfer, str(e))
+            logger.error(f"Failed to process transfer {transfer_id}: {e}")
+            await self._fail_transfer(transfer_id, str(e))
     
-    async def _process_swift_transfer(self, transfer: Transfer) -> None:
+    async def _process_swift_transfer(self, transfer: Transfer):
         """Process SWIFT transfer"""
         try:
-            # Update status
-            transfer.status = TransferStatus.PROCESSING
-            transfer.updated_at = datetime.now(timezone.utc)
-            
-            # Create SWIFT message
-            swift_connector = await create_swift_connector()
-            async with swift_connector:
+            async with await create_swift_connector() as swift_connector:
+                # Create SWIFT message
                 swift_message = swift_connector.create_mt103_message(transfer)
+                
+                # Send message
                 result = await swift_connector.send_message(swift_message)
                 
-                transfer.swift_message_id = result.get('message_id')
+                # Update transfer with SWIFT message ID
+                transfer.swift_message_id = swift_message.message_id
                 transfer.status = TransferStatus.PENDING
-                transfer.updated_at = datetime.now(timezone.utc)
+                self.db.commit()
                 
-                # Create event
-                event = TransferEvent(
-                    id=str(uuid.uuid4()),
-                    transfer_id=transfer.id,
-                    event_type="swift_message_sent",
-                    status=TransferStatus.PENDING,
-                    message="SWIFT message sent",
-                    timestamp=datetime.now(timezone.utc),
-                    metadata={
-                        "swift_message_id": result.get('message_id'),
-                        "acknowledgment": result.get('acknowledgment')
-                    }
+                await self._create_transfer_event(
+                    transfer.id,
+                    "swift_sent",
+                    TransferStatus.PENDING,
+                    f"SWIFT message sent: {swift_message.message_id}"
                 )
                 
-                self.db.add(event)
-                self.db.commit()
+                logger.info(f"SWIFT transfer processed: {transfer.transfer_id}")
                 
         except Exception as e:
             logger.error(f"SWIFT transfer processing failed: {e}")
-            raise TransferError(f"SWIFT processing failed: {e}")
+            raise
     
-    async def _process_mojaloop_transfer(self, transfer: Transfer) -> None:
+    async def _process_mojaloop_transfer(self, transfer: Transfer):
         """Process Mojaloop transfer"""
         try:
-            # Update status
-            transfer.status = TransferStatus.PROCESSING
-            transfer.updated_at = datetime.now(timezone.utc)
-            
-            # Create Mojaloop transfer
-            mojaloop_connector = await create_mojaloop_connector()
-            async with mojaloop_connector:
+            async with await create_mojaloop_connector() as mojaloop_connector:
                 # Create quote
-                quote = await mojaloop_connector.create_quote(transfer)
+                quote_result = await mojaloop_connector.create_quote(transfer)
                 
                 # Initiate transfer
-                result = await mojaloop_connector.initiate_transfer(transfer, quote['quoteId'])
-                
-                transfer.mojaloop_transfer_id = result.get('transferId')
-                transfer.status = TransferStatus.PENDING
-                transfer.updated_at = datetime.now(timezone.utc)
-                
-                # Create event
-                event = TransferEvent(
-                    id=str(uuid.uuid4()),
-                    transfer_id=transfer.id,
-                    event_type="mojaloop_transfer_initiated",
-                    status=TransferStatus.PENDING,
-                    message="Mojaloop transfer initiated",
-                    timestamp=datetime.now(timezone.utc),
-                    metadata={
-                        "mojaloop_transfer_id": result.get('transferId'),
-                        "quote_id": quote['quoteId']
-                    }
+                transfer_result = await mojaloop_connector.initiate_transfer(
+                    transfer, quote_result["quoteId"]
                 )
                 
-                self.db.add(event)
+                # Update transfer
+                transfer.mojaloop_transfer_id = transfer_result["transferId"]
+                transfer.status = TransferStatus.PENDING
                 self.db.commit()
+                
+                await self._create_transfer_event(
+                    transfer.id,
+                    "mojaloop_initiated",
+                    TransferStatus.PENDING,
+                    f"Mojaloop transfer initiated: {transfer_result['transferId']}"
+                )
+                
+                logger.info(f"Mojaloop transfer processed: {transfer.transfer_id}")
                 
         except Exception as e:
             logger.error(f"Mojaloop transfer processing failed: {e}")
-            raise TransferError(f"Mojaloop processing failed: {e}")
+            raise
     
-    async def _process_iban_transfer(self, transfer: Transfer) -> None:
+    async def _process_iban_transfer(self, transfer: Transfer):
         """Process IBAN transfer"""
         try:
-            # Update status
-            transfer.status = TransferStatus.PROCESSING
-            transfer.updated_at = datetime.now(timezone.utc)
-            
-            # For IBAN transfers, we'll simulate processing
-            # In a real implementation, this would connect to the destination bank
+            # For IBAN transfers, we'll use ISO 20022
+            iso20022_connector = create_iso20022_connector()
             
             # Create ISO 20022 message
-            iso_connector = create_iso20022_connector()
-            iso_message = iso_connector.create_pacs008_message(transfer)
+            iso_message = iso20022_connector.create_pacs008_message(transfer)
             
+            # Update transfer
+            transfer.iso20022_message_id = iso_message.message_id
             transfer.status = TransferStatus.PENDING
-            transfer.updated_at = datetime.now(timezone.utc)
+            self.db.commit()
             
-            # Create event
-            event = TransferEvent(
-                id=str(uuid.uuid4()),
-                transfer_id=transfer.id,
-                event_type="iban_transfer_initiated",
-                status=TransferStatus.PENDING,
-                message="IBAN transfer initiated",
-                timestamp=datetime.now(timezone.utc),
-                metadata={
-                    "iso_message_id": iso_message.message_id,
-                    "beneficiary_iban": transfer.beneficiary_iban
-                }
+            await self._create_transfer_event(
+                transfer.id,
+                "iso20022_created",
+                TransferStatus.PENDING,
+                f"ISO 20022 message created: {iso_message.message_id}"
             )
             
-            self.db.add(event)
-            self.db.commit()
+            logger.info(f"IBAN transfer processed: {transfer.transfer_id}")
             
         except Exception as e:
             logger.error(f"IBAN transfer processing failed: {e}")
-            raise TransferError(f"IBAN processing failed: {e}")
+            raise
     
-    async def _fail_transfer(self, transfer: Transfer, reason: str) -> None:
-        """Mark transfer as failed"""
+    async def _process_internal_transfer(self, transfer: Transfer):
+        """Process internal transfer"""
         try:
-            transfer.status = TransferStatus.FAILED
-            transfer.updated_at = datetime.now(timezone.utc)
+            # Get destination account
+            destination_account = self.db.query(Account).filter(
+                Account.id == transfer.destination_account_id
+            ).first()
             
-            # Unblock amount from source account
-            source_account = self.db.query(Account).filter(Account.id == transfer.source_account_id).first()
-            if source_account:
-                source_account.unblock_amount(transfer.amount)
+            if not destination_account:
+                raise ValueError("Destination account not found")
             
-            # Create event
-            event = TransferEvent(
-                id=str(uuid.uuid4()),
-                transfer_id=transfer.id,
-                event_type="transfer_failed",
-                status=TransferStatus.FAILED,
-                message=f"Transfer failed: {reason}",
-                timestamp=datetime.now(timezone.utc),
-                metadata={"reason": reason}
+            # Debit source account
+            source_account = transfer.source_account
+            if not source_account.debit(transfer.total_amount):
+                raise ValueError("Failed to debit source account")
+            
+            # Credit destination account
+            destination_account.credit(transfer.amount)
+            
+            # Update transfer status
+            transfer.status = TransferStatus.COMPLETED
+            transfer.completed_at = datetime.now(timezone.utc)
+            self.db.commit()
+            
+            # Create account activities
+            await self._create_account_activity(
+                source_account.id,
+                "debit",
+                transfer.total_amount,
+                transfer.currency,
+                f"Transfer to {transfer.beneficiary_name}",
+                transfer.transfer_id,
+                source_account.balance + transfer.total_amount,
+                source_account.balance
             )
             
-            self.db.add(event)
+            await self._create_account_activity(
+                destination_account.id,
+                "credit",
+                transfer.amount,
+                transfer.currency,
+                f"Transfer from {source_account.holder_name}",
+                transfer.transfer_id,
+                destination_account.balance - transfer.amount,
+                destination_account.balance
+            )
+            
+            await self._create_transfer_event(
+                transfer.id,
+                "completed",
+                TransferStatus.COMPLETED,
+                "Internal transfer completed"
+            )
+            
+            logger.info(f"Internal transfer completed: {transfer.transfer_id}")
+            
+        except Exception as e:
+            logger.error(f"Internal transfer processing failed: {e}")
+            raise
+    
+    async def _fail_transfer(self, transfer_id: str, error_message: str):
+        """Mark transfer as failed"""
+        try:
+            transfer = self.db.query(Transfer).filter(Transfer.id == transfer_id).first()
+            if not transfer:
+                return
+            
+            # Unblock amount from source account
+            source_account = transfer.source_account
+            source_account.unblock_amount(transfer.total_amount)
+            
+            # Update transfer status
+            transfer.status = TransferStatus.FAILED
             self.db.commit()
+            
+            await self._create_transfer_event(
+                transfer.id,
+                "failed",
+                TransferStatus.FAILED,
+                f"Transfer failed: {error_message}"
+            )
+            
+            logger.error(f"Transfer failed: {transfer_id} - {error_message}")
             
         except Exception as e:
             logger.error(f"Failed to mark transfer as failed: {e}")
-            self.db.rollback()
     
-    def get_transfers(self, user_id: str, page: int = 1, per_page: int = 20, filters: Optional[Dict] = None) -> List[Transfer]:
-        """Get user transfers with filtering and pagination"""
+    async def _create_transfer_event(self, transfer_id: str, event_type: str, status: TransferStatus, description: str):
+        """Create transfer event"""
         try:
-            query = self.db.query(Transfer).join(Account).filter(Account.user_id == user_id)
-            
-            if filters:
-                if filters.get('status'):
-                    query = query.filter(Transfer.status == filters['status'])
-                if filters.get('transfer_type'):
-                    query = query.filter(Transfer.transfer_type == filters['transfer_type'])
-                if filters.get('priority'):
-                    query = query.filter(Transfer.priority == filters['priority'])
-                if filters.get('currency'):
-                    query = query.filter(Transfer.currency == filters['currency'])
-            
-            # Apply pagination
-            offset = (page - 1) * per_page
-            transfers = query.order_by(desc(Transfer.created_at)).offset(offset).limit(per_page).all()
-            
-            return transfers
-            
-        except Exception as e:
-            logger.error(f"Failed to get transfers: {e}")
-            raise TransferError(f"Failed to retrieve transfers: {e}")
-    
-    def get_transfer(self, transfer_id: str, user_id: str) -> Optional[Transfer]:
-        """Get a specific transfer by ID"""
-        try:
-            transfer = self.db.query(Transfer).join(Account).filter(
-                and_(
-                    Transfer.id == transfer_id,
-                    Account.user_id == user_id
-                )
-            ).first()
-            
-            return transfer
-            
-        except Exception as e:
-            logger.error(f"Failed to get transfer: {e}")
-            raise TransferError(f"Failed to retrieve transfer: {e}")
-    
-    def get_transfer_events(self, transfer_id: str, user_id: str) -> List[TransferEvent]:
-        """Get events for a specific transfer"""
-        try:
-            # Verify user owns the transfer
-            transfer = self.get_transfer(transfer_id, user_id)
-            if not transfer:
-                return []
-            
-            events = self.db.query(TransferEvent).filter(
-                TransferEvent.transfer_id == transfer_id
-            ).order_by(TransferEvent.timestamp).all()
-            
-            return events
-            
-        except Exception as e:
-            logger.error(f"Failed to get transfer events: {e}")
-            raise TransferError(f"Failed to retrieve transfer events: {e}")
-    
-    async def cancel_transfer(self, transfer_id: str, user_id: str, reason: str) -> None:
-        """Cancel a transfer"""
-        try:
-            transfer = self.get_transfer(transfer_id, user_id)
-            if not transfer:
-                raise ValidationError("Transfer not found")
-            
-            if transfer.status not in [TransferStatus.INITIATED, TransferStatus.PENDING]:
-                raise TransferError("Cannot cancel transfer in current status")
-            
-            # Update transfer status
-            transfer.status = TransferStatus.CANCELLED
-            transfer.updated_at = datetime.now(timezone.utc)
-            
-            # Unblock amount from source account
-            source_account = self.db.query(Account).filter(Account.id == transfer.source_account_id).first()
-            if source_account:
-                source_account.unblock_amount(transfer.amount)
-            
-            # Create event
             event = TransferEvent(
                 id=str(uuid.uuid4()),
-                transfer_id=transfer.id,
-                event_type="transfer_cancelled",
-                status=TransferStatus.CANCELLED,
-                message=f"Transfer cancelled: {reason}",
-                timestamp=datetime.now(timezone.utc),
-                metadata={"reason": reason}
+                transfer_id=transfer_id,
+                event_type=event_type,
+                status=status,
+                description=description,
+                created_at=datetime.now(timezone.utc)
             )
             
             self.db.add(event)
             self.db.commit()
             
         except Exception as e:
-            logger.error(f"Failed to cancel transfer: {e}")
-            self.db.rollback()
-            raise TransferError(f"Failed to cancel transfer: {e}")
+            logger.error(f"Failed to create transfer event: {e}")
     
-    def _calculate_fees(self, amount: float, transfer_type: TransferType, priority: TransferPriority) -> float:
-        """Calculate transfer fees"""
-        base_fee = 0.0
-        
-        if transfer_type == TransferType.SWIFT:
-            base_fee = 25.0
-        elif transfer_type == TransferType.MOJALOOP:
-            base_fee = 2.0
-        elif transfer_type == TransferType.IBAN:
-            base_fee = 5.0
-        
-        # Priority fees
-        if priority == TransferPriority.URGENT:
-            base_fee *= 1.5
-        elif priority == TransferPriority.EXPRESS:
-            base_fee *= 2.0
-        
-        # Amount-based fees (0.1% for amounts over $1000)
-        if amount > 1000:
-            base_fee += amount * 0.001
-        
-        return round(base_fee, 2)
-    
-    def get_user_transfer_stats(self, user_id: str) -> Dict[str, Any]:
-        """Get transfer statistics for user"""
+    async def _create_account_activity(self, account_id: str, activity_type: str, amount: float, currency: str, description: str, reference: str, balance_before: float, balance_after: float):
+        """Create account activity"""
         try:
-            # Get user accounts
-            accounts = self.db.query(Account).filter(Account.user_id == user_id).all()
-            account_ids = [acc.id for acc in accounts]
+            activity = AccountActivity(
+                id=str(uuid.uuid4()),
+                account_id=account_id,
+                activity_type=activity_type,
+                amount=amount,
+                currency=currency,
+                description=description,
+                reference=reference,
+                balance_before=balance_before,
+                balance_after=balance_after,
+                created_at=datetime.now(timezone.utc)
+            )
             
-            if not account_ids:
-                return {
-                    "total_transfers": 0,
-                    "total_amount": 0,
-                    "pending_transfers": 0,
-                    "completed_transfers": 0,
-                    "failed_transfers": 0,
-                    "currency": "USD"
-                }
+            self.db.add(activity)
+            self.db.commit()
             
-            # Calculate statistics
-            total_transfers = self.db.query(func.count(Transfer.id)).filter(
-                Transfer.source_account_id.in_(account_ids)
-            ).scalar() or 0
+        except Exception as e:
+            logger.error(f"Failed to create account activity: {e}")
+    
+    async def get_transfer(self, transfer_id: str, user_id: str) -> Optional[Transfer]:
+        """Get transfer by ID for user"""
+        return self.db.query(Transfer).join(Account).filter(
+            and_(
+                Transfer.transfer_id == transfer_id,
+                Account.user_id == user_id
+            )
+        ).first()
+    
+    async def get_user_transfers(self, user_id: str, page: int = 1, size: int = 20, status: Optional[TransferStatus] = None, transfer_type: Optional[TransferType] = None) -> Tuple[List[Transfer], int]:
+        """Get transfers for user with pagination"""
+        query = self.db.query(Transfer).join(Account).filter(Account.user_id == user_id)
+        
+        if status:
+            query = query.filter(Transfer.status == status)
+        
+        if transfer_type:
+            query = query.filter(Transfer.transfer_type == transfer_type)
+        
+        total = query.count()
+        transfers = query.order_by(desc(Transfer.created_at)).offset((page - 1) * size).limit(size).all()
+        
+        return transfers, total
+    
+    async def cancel_transfer(self, transfer_id: str, user_id: str) -> bool:
+        """Cancel transfer"""
+        transfer = await self.get_transfer(transfer_id, user_id)
+        if not transfer or not transfer.can_cancel:
+            return False
+        
+        try:
+            # Unblock amount from source account
+            source_account = transfer.source_account
+            source_account.unblock_amount(transfer.total_amount)
             
-            total_amount = self.db.query(func.sum(Transfer.amount)).filter(
-                Transfer.source_account_id.in_(account_ids)
-            ).scalar() or 0
+            # Update transfer status
+            transfer.status = TransferStatus.CANCELLED
+            self.db.commit()
             
-            pending_transfers = self.db.query(func.count(Transfer.id)).filter(
+            await self._create_transfer_event(
+                transfer.id,
+                "cancelled",
+                TransferStatus.CANCELLED,
+                "Transfer cancelled by user"
+            )
+            
+            logger.info(f"Transfer cancelled: {transfer_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to cancel transfer: {e}")
+            return False
+    
+    async def validate_transfer(self, transfer_data: dict, user: User) -> Dict[str, Any]:
+        """Validate transfer data"""
+        errors = []
+        warnings = []
+        estimated_fees = 0.0
+        
+        try:
+            # Validate required fields
+            required_fields = ["source_account_id", "beneficiary_name", "amount", "currency", "transfer_type"]
+            for field in required_fields:
+                if field not in transfer_data:
+                    errors.append(f"Missing required field: {field}")
+            
+            if errors:
+                return {"valid": False, "errors": errors}
+            
+            # Validate amount
+            amount = transfer_data["amount"]
+            if amount <= 0:
+                errors.append("Amount must be greater than 0")
+            
+            # Validate currency
+            currency = transfer_data["currency"]
+            if currency not in ["USD", "EUR", "CDF", "GBP", "CHF"]:
+                errors.append("Unsupported currency")
+            
+            # Validate source account
+            source_account = self.db.query(Account).filter(
                 and_(
-                    Transfer.source_account_id.in_(account_ids),
-                    Transfer.status.in_([TransferStatus.INITIATED, TransferStatus.PROCESSING, TransferStatus.PENDING])
+                    Account.id == transfer_data["source_account_id"],
+                    Account.user_id == user.id,
+                    Account.status == "active"
                 )
-            ).scalar() or 0
+            ).first()
             
-            completed_transfers = self.db.query(func.count(Transfer.id)).filter(
-                and_(
-                    Transfer.source_account_id.in_(account_ids),
-                    Transfer.status == TransferStatus.COMPLETED
-                )
-            ).scalar() or 0
+            if not source_account:
+                errors.append("Source account not found or not active")
+            else:
+                # Check available balance
+                if source_account.available_balance < amount:
+                    errors.append(f"Insufficient funds. Available: {source_account.available_balance}")
+                
+                # Check daily limit
+                if source_account.daily_used + amount > source_account.daily_limit:
+                    errors.append(f"Daily limit exceeded. Used: {source_account.daily_used}, Limit: {source_account.daily_limit}")
             
-            failed_transfers = self.db.query(func.count(Transfer.id)).filter(
-                and_(
-                    Transfer.source_account_id.in_(account_ids),
-                    Transfer.status == TransferStatus.FAILED
-                )
-            ).scalar() or 0
+            # Calculate estimated fees
+            transfer_type = transfer_data["transfer_type"]
+            if transfer_type == "swift":
+                estimated_fees = 25.0  # SWIFT fees
+            elif transfer_type == "mojaloop":
+                estimated_fees = 5.0   # Mojaloop fees
+            elif transfer_type == "iban":
+                estimated_fees = 15.0  # IBAN fees
+            else:
+                estimated_fees = 0.0   # Internal transfer
+            
+            # Add warnings for large amounts
+            if amount > 10000:
+                warnings.append("Large transfer amount - additional verification may be required")
             
             return {
-                "total_transfers": total_transfers,
-                "total_amount": total_amount,
-                "pending_transfers": pending_transfers,
-                "completed_transfers": completed_transfers,
-                "failed_transfers": failed_transfers,
-                "currency": "USD"
+                "valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings,
+                "estimated_fees": estimated_fees
             }
             
         except Exception as e:
-            logger.error(f"Failed to get transfer stats: {e}")
-            raise TransferError(f"Failed to retrieve transfer statistics: {e}")
-    
-    def get_transfer_chart_data(self, user_id: str, period: str = "7d") -> List[Dict[str, Any]]:
-        """Get transfer chart data for user"""
-        try:
-            # Get user accounts
-            accounts = self.db.query(Account).filter(Account.user_id == user_id).all()
-            account_ids = [acc.id for acc in accounts]
-            
-            if not account_ids:
-                return []
-            
-            # Calculate date range
-            from datetime import timedelta
-            end_date = datetime.now(timezone.utc)
-            
-            if period == "1d":
-                start_date = end_date - timedelta(days=1)
-                group_by = func.date_trunc('hour', Transfer.created_at)
-            elif period == "7d":
-                start_date = end_date - timedelta(days=7)
-                group_by = func.date_trunc('day', Transfer.created_at)
-            elif period == "30d":
-                start_date = end_date - timedelta(days=30)
-                group_by = func.date_trunc('day', Transfer.created_at)
-            else:
-                start_date = end_date - timedelta(days=7)
-                group_by = func.date_trunc('day', Transfer.created_at)
-            
-            # Query transfer data
-            results = self.db.query(
-                group_by.label('date'),
-                func.count(Transfer.id).label('count'),
-                func.sum(Transfer.amount).label('amount')
-            ).filter(
-                and_(
-                    Transfer.source_account_id.in_(account_ids),
-                    Transfer.created_at >= start_date,
-                    Transfer.created_at <= end_date
-                )
-            ).group_by(group_by).order_by(group_by).all()
-            
-            # Format results
-            chart_data = []
-            for result in results:
-                chart_data.append({
-                    "date": result.date.isoformat(),
-                    "count": result.count,
-                    "amount": float(result.amount or 0),
-                    "currency": "USD"
-                })
-            
-            return chart_data
-            
-        except Exception as e:
-            logger.error(f"Failed to get transfer chart data: {e}")
-            raise TransferError(f"Failed to retrieve transfer chart data: {e}")
+            logger.error(f"Transfer validation failed: {e}")
+            return {
+                "valid": False,
+                "errors": [f"Validation error: {str(e)}"]
+            }

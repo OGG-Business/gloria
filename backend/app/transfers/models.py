@@ -1,26 +1,24 @@
 """
-Modèles de base de données pour les transferts bancaires
+Transfer models for Banking Transfer Platform
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Enum, JSON
+
+from sqlalchemy import Column, String, Float, DateTime, Enum, ForeignKey, Boolean, Text, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
 import enum
-import uuid
 
 from app.common.database import Base
 
-
-class TransferType(str, enum.Enum):
-    """Types de transferts"""
+class TransferType(enum.Enum):
+    """Transfer types"""
     SWIFT = "swift"
-    SEPA = "sepa"
+    IBAN = "iban"
     MOJALOOP = "mojaloop"
-    LOCAL = "local"
+    INTERNAL = "internal"
 
-
-class TransferStatus(str, enum.Enum):
-    """Statuts des transferts"""
+class TransferStatus(enum.Enum):
+    """Transfer status"""
     INITIATED = "initiated"
     PENDING = "pending"
     PROCESSING = "processing"
@@ -29,204 +27,158 @@ class TransferStatus(str, enum.Enum):
     CANCELLED = "cancelled"
     REJECTED = "rejected"
 
-
-class TransferPriority(str, enum.Enum):
-    """Priorités des transferts"""
+class TransferPriority(enum.Enum):
+    """Transfer priority"""
     NORMAL = "normal"
     URGENT = "urgent"
-    HIGH = "high"
-
+    EXPRESS = "express"
 
 class Transfer(Base):
-    """Modèle de transfert bancaire"""
+    """Transfer model"""
     __tablename__ = "transfers"
     
-    id = Column(Integer, primary_key=True, index=True)
-    transfer_id = Column(String(50), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
-    
-    # Type et statut
-    transfer_type = Column(Enum(TransferType), nullable=False)
-    status = Column(Enum(TransferStatus), nullable=False, default=TransferStatus.INITIATED)
-    priority = Column(Enum(TransferPriority), nullable=False, default=TransferPriority.NORMAL)
-    
-    # Comptes source et destination
-    source_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
-    destination_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
-    
-    # Montants
+    id = Column(String(36), primary_key=True)
+    transfer_id = Column(String(50), unique=True, nullable=False, index=True)
     amount = Column(Float, nullable=False)
     currency = Column(String(3), nullable=False)
-    exchange_rate = Column(Float, nullable=True)
-    converted_amount = Column(Float, nullable=True)
-    
-    # Frais
-    fees = Column(Float, nullable=False, default=0.0)
+    fees = Column(Float, default=0.0, nullable=False)
     total_amount = Column(Float, nullable=False)  # amount + fees
     
-    # Informations de destination
+    # Source account
+    source_account_id = Column(String(36), ForeignKey("accounts.id"), nullable=False)
+    
+    # Destination details
+    destination_account_id = Column(String(36), ForeignKey("accounts.id"), nullable=True)
     beneficiary_name = Column(String(255), nullable=False)
-    beneficiary_bank = Column(String(255), nullable=False)
     beneficiary_iban = Column(String(34), nullable=True)
     beneficiary_bic = Column(String(11), nullable=True)
-    beneficiary_account = Column(String(50), nullable=True)
+    beneficiary_bank = Column(String(255), nullable=True)
+    beneficiary_country = Column(String(2), nullable=True)
     
-    # Références bancaires
-    swift_message_id = Column(String(50), nullable=True)
-    mojaloop_transfer_id = Column(String(50), nullable=True)
-    external_reference = Column(String(100), nullable=True)
+    # Transfer details
+    description = Column(Text, nullable=True)
+    reference = Column(String(100), nullable=True)
+    transfer_type = Column(Enum(TransferType), nullable=False)
+    status = Column(Enum(TransferStatus), default=TransferStatus.INITIATED, nullable=False)
+    priority = Column(Enum(TransferPriority), default=TransferPriority.NORMAL, nullable=False)
     
-    # Instructions
-    purpose = Column(String(255), nullable=True)
-    instructions = Column(Text, nullable=True)
+    # External references
+    swift_message_id = Column(String(100), nullable=True)
+    mojaloop_transfer_id = Column(String(100), nullable=True)
+    iso20022_message_id = Column(String(100), nullable=True)
     
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    processed_at = Column(DateTime(timezone=True), nullable=True)
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
-    # Relations
+    # Relationships
     source_account = relationship("Account", foreign_keys=[source_account_id], back_populates="outgoing_transfers")
     destination_account = relationship("Account", foreign_keys=[destination_account_id], back_populates="incoming_transfers")
     events = relationship("TransferEvent", back_populates="transfer", order_by="TransferEvent.created_at")
     
-    # Données techniques
-    technical_data = Column(JSON, nullable=True)  # Données SWIFT, Mojaloop, etc.
-    
     def __repr__(self):
-        return f"<Transfer(id={self.id}, transfer_id='{self.transfer_id}', status='{self.status}')>"
+        return f"<Transfer(id={self.id}, transfer_id={self.transfer_id}, amount={self.amount}, status={self.status})>"
     
     @property
     def is_completed(self) -> bool:
-        """Vérifie si le transfert est terminé"""
+        """Check if transfer is completed"""
         return self.status == TransferStatus.COMPLETED
     
     @property
     def is_failed(self) -> bool:
-        """Vérifie si le transfert a échoué"""
-        return self.status in [TransferStatus.FAILED, TransferStatus.REJECTED, TransferStatus.CANCELLED]
+        """Check if transfer failed"""
+        return self.status in [TransferStatus.FAILED, TransferStatus.REJECTED]
     
     @property
     def is_pending(self) -> bool:
-        """Vérifie si le transfert est en attente"""
+        """Check if transfer is pending"""
         return self.status in [TransferStatus.INITIATED, TransferStatus.PENDING, TransferStatus.PROCESSING]
     
+    @property
     def can_cancel(self) -> bool:
-        """Vérifie si le transfert peut être annulé"""
+        """Check if transfer can be cancelled"""
         return self.status in [TransferStatus.INITIATED, TransferStatus.PENDING]
-    
-    def get_latest_event(self):
-        """Retourne le dernier événement du transfert"""
-        return self.events[-1] if self.events else None
-
 
 class TransferEvent(Base):
-    """Événements de suivi des transferts"""
+    """Transfer event model for tracking transfer lifecycle"""
     __tablename__ = "transfer_events"
     
-    id = Column(Integer, primary_key=True, index=True)
-    transfer_id = Column(Integer, ForeignKey("transfers.id"), nullable=False)
-    
-    # Type d'événement
-    event_type = Column(String(50), nullable=False)  # initiated, sent_to_swift, completed, etc.
-    event_code = Column(String(20), nullable=True)  # Code SWIFT, etc.
-    
-    # Description
-    description = Column(Text, nullable=False)
-    details = Column(JSON, nullable=True)  # Détails techniques
-    
-    # Statut
+    id = Column(String(36), primary_key=True)
+    transfer_id = Column(String(36), ForeignKey("transfers.id"), nullable=False)
+    event_type = Column(String(50), nullable=False)  # initiated, processing, completed, failed, etc.
     status = Column(Enum(TransferStatus), nullable=False)
+    description = Column(Text, nullable=True)
+    metadata = Column(Text, nullable=True)  # JSON string for additional data
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    processed_by = Column(String(100), nullable=True)  # Système ou utilisateur
-    
-    # Relations
+    # Relationships
     transfer = relationship("Transfer", back_populates="events")
     
     def __repr__(self):
-        return f"<TransferEvent(id={self.id}, transfer_id={self.transfer_id}, type='{self.event_type}')>"
-
+        return f"<TransferEvent(id={self.id}, transfer_id={self.transfer_id}, event_type={self.event_type})>"
 
 class TransferTemplate(Base):
-    """Templates de transferts pour les transferts récurrents"""
+    """Transfer template for recurring transfers"""
     __tablename__ = "transfer_templates"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String(36), primary_key=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     
-    # Configuration du transfert
-    source_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    # Template details
+    source_account_id = Column(String(36), ForeignKey("accounts.id"), nullable=False)
     beneficiary_name = Column(String(255), nullable=False)
-    beneficiary_bank = Column(String(255), nullable=False)
     beneficiary_iban = Column(String(34), nullable=True)
     beneficiary_bic = Column(String(11), nullable=True)
-    beneficiary_account = Column(String(50), nullable=True)
+    beneficiary_bank = Column(String(255), nullable=True)
+    beneficiary_country = Column(String(2), nullable=True)
     
-    # Montant par défaut
-    default_amount = Column(Float, nullable=True)
+    # Amount and frequency
+    amount = Column(Float, nullable=False)
     currency = Column(String(3), nullable=False)
+    frequency = Column(String(20), nullable=False)  # daily, weekly, monthly, yearly
+    next_execution = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     
-    # Instructions par défaut
-    default_purpose = Column(String(255), nullable=True)
-    default_instructions = Column(Text, nullable=True)
-    
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    
-    # Relations
-    source_account = relationship("Account")
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     
     def __repr__(self):
-        return f"<TransferTemplate(id={self.id}, name='{self.name}')>"
-
+        return f"<TransferTemplate(id={self.id}, name={self.name}, amount={self.amount})>"
 
 class TransferLimit(Base):
-    """Limites de transfert par utilisateur/compte"""
+    """Transfer limits for users and accounts"""
     __tablename__ = "transfer_limits"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)  # Null pour limites globales
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    account_id = Column(String(36), ForeignKey("accounts.id"), nullable=True)
     
-    # Limites
-    daily_limit = Column(Float, nullable=False)
-    monthly_limit = Column(Float, nullable=False)
-    yearly_limit = Column(Float, nullable=False)
-    
-    # Compteurs
-    daily_used = Column(Float, nullable=False, default=0.0)
-    monthly_used = Column(Float, nullable=False, default=0.0)
-    yearly_used = Column(Float, nullable=False, default=0.0)
-    
-    # Devise
+    # Limit types
+    limit_type = Column(String(50), nullable=False)  # daily, monthly, per_transaction
     currency = Column(String(3), nullable=False)
+    max_amount = Column(Float, nullable=False)
+    current_used = Column(Float, default=0.0, nullable=False)
     
-    # Métadonnées
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # Reset period
+    reset_date = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     
-    # Relations
-    user = relationship("User")
-    account = relationship("Account")
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     
     def __repr__(self):
-        return f"<TransferLimit(id={self.id}, user_id={self.user_id}, daily_limit={self.daily_limit})>"
+        return f"<TransferLimit(id={self.id}, limit_type={self.limit_type}, max_amount={self.max_amount})>"
     
-    def can_transfer(self, amount: float) -> bool:
-        """Vérifie si un transfert peut être effectué"""
-        return (
-            self.daily_used + amount <= self.daily_limit and
-            self.monthly_used + amount <= self.monthly_limit and
-            self.yearly_used + amount <= self.yearly_limit
-        )
+    @property
+    def remaining_amount(self) -> float:
+        """Get remaining amount for this limit"""
+        return max(0, self.max_amount - self.current_used)
     
-    def record_transfer(self, amount: float) -> None:
-        """Enregistre un transfert dans les compteurs"""
-        self.daily_used += amount
-        self.monthly_used += amount
-        self.yearly_used += amount
+    @property
+    def is_exceeded(self) -> bool:
+        """Check if limit is exceeded"""
+        return self.current_used >= self.max_amount
