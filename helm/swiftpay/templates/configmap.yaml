@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "swiftpay.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "swiftpay.labels" . | nindent 4 }}
+data:
+  # Spring profiles
+  SPRING_PROFILES_ACTIVE: {{ .Values.configMap.data.SPRING_PROFILES_ACTIVE | quote }}
+  
+  # Database configuration
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ include "swiftpay.databaseHost" . }}:5432/{{ .Values.postgresql.auth.database }}"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  SPRING_JPA_SHOW_SQL: "false"
+  SPRING_FLYWAY_ENABLED: "true"
+  SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+  
+  # Redis configuration
+  SPRING_DATA_REDIS_HOST: {{ include "swiftpay.redisHost" . | quote }}
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_DATA_REDIS_DATABASE: "0"
+  SPRING_DATA_REDIS_TIMEOUT: "2000ms"
+  
+  # Server configuration
+  SERVER_PORT: {{ .Values.configMap.data.SERVER_PORT | quote }}
+  MANAGEMENT_SERVER_PORT: {{ .Values.configMap.data.MANAGEMENT_SERVER_PORT | quote }}
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "when-authorized"
+  
+  # Security configuration
+  SWIFTPAY_SECURITY_CORS_ALLOWED_ORIGINS: {{ .Values.swiftpay.security.corsAllowedOrigins | quote }}
+  SWIFTPAY_SECURITY_RATE_LIMIT_ENABLED: {{ .Values.swiftpay.security.rateLimitEnabled | quote }}
+  SWIFTPAY_SECURITY_RATE_LIMIT_REQUESTS_PER_MINUTE: {{ .Values.swiftpay.security.rateLimitRequestsPerMinute | quote }}
+  
+  # Vault configuration
+  {{- if .Values.swiftpay.vault.enabled }}
+  SWIFTPAY_VAULT_ENABLED: "true"
+  SWIFTPAY_VAULT_HOST: {{ .Values.swiftpay.vault.host | quote }}
+  SWIFTPAY_VAULT_PORT: {{ .Values.swiftpay.vault.port | quote }}
+  SWIFTPAY_VAULT_SCHEME: {{ .Values.swiftpay.vault.scheme | quote }}
+  SWIFTPAY_VAULT_KV_PATH: {{ .Values.swiftpay.vault.kvPath | quote }}
+  {{- else }}
+  SWIFTPAY_VAULT_ENABLED: "false"
+  {{- end }}
+  
+  # SWIFT configuration
+  {{- if .Values.swiftpay.swift.enabled }}
+  SWIFTPAY_SWIFT_ENABLED: "true"
+  SWIFTPAY_SWIFT_ENVIRONMENT: {{ .Values.swiftpay.swift.environment | quote }}
+  SWIFTPAY_SWIFT_TIMEOUT: {{ .Values.swiftpay.swift.timeout | quote }}
+  SWIFTPAY_SWIFT_RETRY_ATTEMPTS: {{ .Values.swiftpay.swift.retryAttempts | quote }}
+  SWIFTPAY_SWIFT_TLS_ENABLED: {{ .Values.swiftpay.swift.tlsEnabled | quote }}
+  {{- else }}
+  SWIFTPAY_SWIFT_ENABLED: "false"
+  {{- end }}
+  
+  # Mojaloop configuration
+  {{- if .Values.swiftpay.mojaloop.enabled }}
+  SWIFTPAY_MOJALOOP_ENABLED: "true"
+  SWIFTPAY_MOJALOOP_ENVIRONMENT: {{ .Values.swiftpay.mojaloop.environment | quote }}
+  SWIFTPAY_MOJALOOP_TIMEOUT: {{ .Values.swiftpay.mojaloop.timeout | quote }}
+  SWIFTPAY_MOJALOOP_RETRY_ATTEMPTS: {{ .Values.swiftpay.mojaloop.retryAttempts | quote }}
+  {{- else }}
+  SWIFTPAY_MOJALOOP_ENABLED: "false"
+  {{- end }}
+  
+  # KYC/AML configuration
+  {{- if .Values.swiftpay.kyc.enabled }}
+  SWIFTPAY_KYC_ENABLED: "true"
+  SWIFTPAY_KYC_VERIFICATION_REQUIRED: {{ .Values.swiftpay.kyc.verificationRequired | quote }}
+  SWIFTPAY_KYC_DOCUMENT_RETENTION_DAYS: {{ .Values.swiftpay.kyc.documentRetentionDays | quote }}
+  {{- else }}
+  SWIFTPAY_KYC_ENABLED: "false"
+  {{- end }}
+  
+  {{- if .Values.swiftpay.aml.enabled }}
+  SWIFTPAY_AML_ENABLED: "true"
+  SWIFTPAY_AML_THRESHOLD_AMOUNT: {{ .Values.swiftpay.aml.thresholdAmount | quote }}
+  SWIFTPAY_AML_THRESHOLD_CURRENCY: {{ .Values.swiftpay.aml.thresholdCurrency | quote }}
+  SWIFTPAY_SANCTIONS_SCREENING_ENABLED: {{ .Values.swiftpay.aml.sanctionsScreeningEnabled | quote }}
+  {{- else }}
+  SWIFTPAY_AML_ENABLED: "false"
+  {{- end }}
+  
+  # File upload configuration
+  SWIFTPAY_FILES_UPLOAD_MAX_SIZE: {{ .Values.swiftpay.files.uploadMaxSize | quote }}
+  SWIFTPAY_FILES_UPLOAD_ALLOWED_TYPES: {{ .Values.swiftpay.files.uploadAllowedTypes | quote }}
+  SWIFTPAY_FILES_STORAGE_PATH: {{ .Values.swiftpay.files.storagePath | quote }}
+  
+  # Webhook configuration
+  {{- if .Values.swiftpay.webhooks.enabled }}
+  SWIFTPAY_WEBHOOKS_ENABLED: "true"
+  SWIFTPAY_WEBHOOKS_TIMEOUT: {{ .Values.swiftpay.webhooks.timeout | quote }}
+  SWIFTPAY_WEBHOOKS_RETRY_ATTEMPTS: {{ .Values.swiftpay.webhooks.retryAttempts | quote }}
+  SWIFTPAY_WEBHOOKS_RETRY_DELAY: {{ .Values.swiftpay.webhooks.retryDelay | quote }}
+  {{- else }}
+  SWIFTPAY_WEBHOOKS_ENABLED: "false"
+  {{- end }}
+  
+  # Logging configuration
+  LOGGING_LEVEL_COM_SWIFTPAY: "INFO"
+  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: "WARN"
+  LOGGING_PATTERN_CONSOLE: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+  
+  # Metrics configuration
+  MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: "true"
+  MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES_HISTOGRAM_HTTP_SERVER_REQUESTS: "true"
+  
+  # Application info
+  INFO_APP_NAME: "SwiftPay"
+  INFO_APP_DESCRIPTION: "Global Bank Transfer Management System"
+  INFO_APP_VERSION: {{ .Chart.AppVersion | quote }}
+  INFO_APP_ENVIRONMENT: "production"

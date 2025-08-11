@@ -1,122 +1,310 @@
-# Default values for SwiftPay
+# Default values for swiftpay
 # This is a YAML-formatted file.
 
+# Global configuration
 global:
-  environment: development
-  domain: swiftpay.local
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
 
-replicaCount: 1
+# Common labels
+commonLabels:
+  app.kubernetes.io/name: swiftpay
+  app.kubernetes.io/instance: swiftpay
 
+# Image configuration
 image:
-  repository: swiftpay/backend
-  pullPolicy: IfNotPresent
+  registry: docker.io
+  repository: swiftpay
   tag: "latest"
+  pullPolicy: IfNotPresent
 
+# Backend configuration
+backend:
+  enabled: true
+  replicaCount: 3
+  
+  image:
+    repository: swiftpay/backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8080
+    managementPort: 8081
+  
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 3Gi
+    requests:
+      cpu: 500m
+      memory: 1.5Gi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - swiftpay-backend
+            topologyKey: kubernetes.io/hostname
+
+# Frontend configuration
 frontend:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
+  
   image:
     repository: swiftpay/frontend
-    pullPolicy: IfNotPresent
     tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  
+  config:
+    apiBaseUrl: "https://api.swiftpay.example.com"
+    keycloakUrl: "https://auth.swiftpay.example.com"
+    keycloakRealm: "swiftpay"
+    keycloakClientId: "swiftpay-frontend"
+    environment: "production"
 
-nameOverride: ""
-fullnameOverride: ""
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: swiftpay.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+    - host: api.swiftpay.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: backend
+  tls:
+    - secretName: swiftpay-tls
+      hosts:
+        - swiftpay.example.com
+        - api.swiftpay.example.com
 
+# Security configuration
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  
+  networkPolicy:
+    enabled: true
+    policyTypes:
+      - Ingress
+      - Egress
+
+# Service Account
 serviceAccount:
   create: true
   annotations: {}
   name: ""
 
-podAnnotations: {}
+# Secrets configuration
+secrets:
+  create: false  # Secrets should be created externally for security
+  existingSecret: "swiftpay-secrets"
 
-podSecurityContext:
-  fsGroup: 1000
-  runAsNonRoot: true
-  runAsUser: 1000
+# ConfigMap configuration
+configMap:
+  create: true
+  data:
+    SPRING_PROFILES_ACTIVE: "production,docker"
+    SERVER_PORT: "8080"
+    MANAGEMENT_SERVER_PORT: "8081"
 
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-  readOnlyRootFilesystem: false
-  runAsNonRoot: true
-  runAsUser: 1000
-
-service:
-  type: ClusterIP
-  port: 8080
-  managementPort: 8081
-
-frontend:
-  service:
-    type: ClusterIP
-    port: 80
-
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: api.swiftpay.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-
-resources:
-  limits:
-    cpu: 1000m
-    memory: 2Gi
-  requests:
-    cpu: 500m
-    memory: 1Gi
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
-
-# Database configuration
-database:
-  enabled: true
-  type: postgresql
-  host: swiftpay-postgres
-  port: 5432
-  name: swiftpay
-  username: swiftpay_user
+# Persistence
+persistence:
+  uploads:
+    enabled: true
+    storageClass: "fast-ssd"
+    accessMode: ReadWriteMany
+    size: 50Gi
   
-# Redis configuration  
-redis:
-  enabled: true
-  host: swiftpay-redis
-  port: 6379
+  logs:
+    enabled: true
+    storageClass: "standard"
+    accessMode: ReadWriteOnce
+    size: 10Gi
 
-# Vault configuration
-vault:
+# PostgreSQL configuration (Bitnami chart)
+postgresql:
   enabled: true
-  url: http://swiftpay-vault:8200
-
-# Monitoring
-monitoring:
-  prometheus:
+  auth:
+    postgresPassword: ""  # Set via secret
+    database: swiftpay
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: 1000m
+  metrics:
     enabled: true
     serviceMonitor:
-      enabled: false
-  grafana:
-    enabled: false
+      enabled: true
 
-# Security
-security:
-  podSecurityPolicy:
-    enabled: false
-  networkPolicy:
-    enabled: false
+# Redis configuration (Bitnami chart)
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""  # Set via secret
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+  replica:
+    replicaCount: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+# Monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+  
+  prometheusRule:
+    enabled: true
+    rules:
+      - alert: SwiftPayBackendDown
+        expr: up{job="swiftpay-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SwiftPay Backend is down"
+      - alert: SwiftPayHighErrorRate
+        expr: rate(http_requests_total{job="swiftpay-backend",status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 7  # days
+  storage:
+    size: 100Gi
+    storageClass: "standard"
+
+# SwiftPay specific configuration
+swiftpay:
+  # Security settings
+  security:
+    corsAllowedOrigins: "https://swiftpay.example.com"
+    rateLimitEnabled: true
+    rateLimitRequestsPerMinute: 100
+  
+  # Vault integration
+  vault:
+    enabled: true
+    host: "vault.vault.svc.cluster.local"
+    port: 8200
+    scheme: "https"
+    kvPath: "secret/swiftpay"
+  
+  # SWIFT configuration
+  swift:
+    enabled: true
+    environment: "production"
+    timeout: 30000
+    retryAttempts: 3
+    tlsEnabled: true
+  
+  # Mojaloop configuration
+  mojaloop:
+    enabled: true
+    environment: "production"
+    timeout: 15000
+    retryAttempts: 3
+  
+  # KYC/AML settings
+  kyc:
+    enabled: true
+    verificationRequired: true
+    documentRetentionDays: 2555
+  
+  aml:
+    enabled: true
+    thresholdAmount: 10000
+    thresholdCurrency: "USD"
+    sanctionsScreeningEnabled: true
+  
+  # File upload settings
+  files:
+    uploadMaxSize: "10MB"
+    uploadAllowedTypes: "image/jpeg,image/png,application/pdf"
+    storagePath: "/app/uploads"
+  
+  # Webhook settings
+  webhooks:
+    enabled: true
+    timeout: 10000
+    retryAttempts: 3
+    retryDelay: 5000

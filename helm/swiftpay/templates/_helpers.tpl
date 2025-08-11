@@ -40,6 +40,9 @@ helm.sh/chart: {{ include "swiftpay.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -51,12 +54,59 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Create the name of the service account to use for backend
 */}}
 {{- define "swiftpay.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "swiftpay.fullname" .) .Values.serviceAccount.name }}
+{{- default (printf "%s-%s" (include "swiftpay.fullname" .) "backend") .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the name of the service account to use for frontend
+*/}}
+{{- define "swiftpay.frontendServiceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- printf "%s-%s" (include "swiftpay.fullname" .) "frontend" }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate certificates secret name
+*/}}
+{{- define "swiftpay.certificatesSecretName" -}}
+{{- printf "%s-%s" (include "swiftpay.fullname" .) "swift-certs" }}
+{{- end }}
+
+{{/*
+Generate TLS secret name
+*/}}
+{{- define "swiftpay.tlsSecretName" -}}
+{{- printf "%s-%s" (include "swiftpay.fullname" .) "tls" }}
+{{- end }}
+
+{{/*
+Database host
+*/}}
+{{- define "swiftpay.databaseHost" -}}
+{{- if .Values.postgresql.enabled }}
+{{- printf "%s-%s" .Release.Name "postgresql" }}
+{{- else }}
+{{- .Values.externalDatabase.host }}
+{{- end }}
+{{- end }}
+
+{{/*
+Redis host
+*/}}
+{{- define "swiftpay.redisHost" -}}
+{{- if .Values.redis.enabled }}
+{{- printf "%s-%s-master" .Release.Name "redis" }}
+{{- else }}
+{{- .Values.externalRedis.host }}
 {{- end }}
 {{- end }}

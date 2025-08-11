@@ -1,0 +1,53 @@
+{{- if .Values.monitoring.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "swiftpay.fullname" . }}-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "swiftpay.labels" . | nindent 4 }}
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: swiftpay.rules
+      rules:
+        {{- range .Values.monitoring.prometheusRule.rules }}
+        - alert: {{ .alert }}
+          expr: {{ .expr }}
+          {{- if .for }}
+          for: {{ .for }}
+          {{- end }}
+          labels:
+            {{- toYaml .labels | nindent 12 }}
+          annotations:
+            {{- toYaml .annotations | nindent 12 }}
+        {{- end }}
+        # Additional default rules
+        - alert: SwiftPayMemoryUsageHigh
+          expr: (container_memory_working_set_bytes{pod=~"{{ include "swiftpay.fullname" . }}-backend-.*"} / container_spec_memory_limit_bytes) * 100 > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage detected"
+            description: "SwiftPay backend pod {{ $labels.pod }} memory usage is above 85%"
+        
+        - alert: SwiftPayDiskSpaceHigh
+          expr: (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100 > 90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Disk space running low"
+            description: "Volume {{ $labels.persistentvolumeclaim }} is {{ $value }}% full"
+        
+        - alert: SwiftPayCertificateExpiringSoon
+          expr: (cert_exporter_cert_expires_in_seconds < 7 * 24 * 3600)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate expiring soon"
+            description: "Certificate {{ $labels.name }} expires in less than 7 days"
+{{- end }}
