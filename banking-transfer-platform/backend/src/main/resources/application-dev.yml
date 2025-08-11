@@ -1,0 +1,66 @@
+spring:
+  # Configuration de développement
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+  
+  # Configuration Redis pour développement
+  redis:
+    host: localhost
+    port: 6379
+    password: redis_password
+  
+  # Configuration Kafka pour développement
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# Configuration du serveur pour développement
+server:
+  port: 8080
+
+# Configuration du logging pour développement
+logging:
+  level:
+    com.banking.transfers: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Configuration JWT pour développement
+jwt:
+  secret: dev-secret-key-change-in-production
+  expiration: 86400000
+
+# Configuration Keycloak pour développement
+keycloak:
+  auth-server-url: http://localhost:8081
+  realm: banking
+  client-id: banking-client
+  client-secret: client-secret
+
+# Configuration SWIFT pour développement
+swift:
+  enabled: false
+  test-mode: true
+
+# Configuration Mojaloop pour développement
+mojaloop:
+  enabled: false
+  test-mode: true
+
+# Configuration de sécurité pour développement
+security:
+  ip-blocking:
+    enabled: false
+
+# Configuration KYC pour développement
+kyc:
+  auto-verification:
+    enabled: true
+  sanctions-screening:
+    enabled: false

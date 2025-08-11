@@ -63,6 +63,11 @@ public enum SourceOfFunds {
                this == PENSION || this == SOCIAL_BENEFITS;
     }
 
+    public boolean isInvestmentRelated() {
+        return this == INVESTMENT_INCOME || this == DIVIDENDS || this == INTEREST || 
+               this == SALE_OF_ASSETS || this == CRYPTO_CURRENCY;
+    }
+
     @Override
     public String toString() {
         return code;

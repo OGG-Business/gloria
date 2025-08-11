@@ -24,6 +24,8 @@ public class LoginRequest {
 
     private String redirectUri;
 
+    private String scope;
+
     // Constructeurs
     public LoginRequest() {}
 
@@ -85,6 +87,14 @@ public class LoginRequest {
 
     public void setRedirectUri(String redirectUri) {
         this.redirectUri = redirectUri;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
     // Méthodes utilitaires

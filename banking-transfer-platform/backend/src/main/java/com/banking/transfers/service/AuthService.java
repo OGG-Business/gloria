@@ -8,6 +8,7 @@ import com.banking.transfers.model.AMLStatus;
 import com.banking.transfers.model.RiskLevel;
 import com.banking.transfers.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
@@ -15,10 +16,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtException;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,11 +44,11 @@ public class AuthService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private JwtEncoder jwtEncoder;
+    @Value("${jwt.secret}")
+    private String jwtSecret;
 
-    @Autowired
-    private JwtDecoder jwtDecoder;
+    @Value("${jwt.expiration}")
+    private long jwtExpiration;
 
     @Autowired
     private KeycloakService keycloakService;
@@ -130,20 +131,20 @@ public class AuthService {
     public void logout(String accessToken, String clientIp) {
         try {
             // Validation du token
-            Jwt jwt = validateAccessToken(accessToken);
-            if (jwt == null) {
+            Claims claims = parseAccessToken(accessToken);
+            if (claims == null) {
                 return;
             }
 
             // Récupération de l'utilisateur
-            String userId = jwt.getSubject();
+            String userId = claims.getSubject();
             User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
             if (user == null) {
                 return;
             }
 
             // Suppression de la session
-            String sessionId = jwt.getClaim("sessionId");
+            String sessionId = claims.get("sessionId", String.class);
             if (sessionId != null) {
                 activeSessions.remove(sessionId);
             }
@@ -168,13 +169,13 @@ public class AuthService {
     public LoginResponse refreshToken(String refreshToken, String clientIp) {
         try {
             // Validation du refresh token
-            Jwt jwt = validateRefreshToken(refreshToken);
-            if (jwt == null) {
+            Claims claims = parseRefreshToken(refreshToken);
+            if (claims == null) {
                 throw new BadCredentialsException("Refresh token invalide");
             }
 
             // Récupération de l'utilisateur
-            String userId = jwt.getSubject();
+            String userId = claims.getSubject();
             User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
             if (user == null) {
                 throw new BadCredentialsException("Utilisateur non trouvé");
@@ -187,7 +188,7 @@ public class AuthService {
             String newAccessToken = generateAccessToken(user);
 
             // Mise à jour de la session
-            String sessionId = jwt.getClaim("sessionId");
+            String sessionId = claims.get("sessionId", String.class);
             UserSession session = activeSessions.get(sessionId);
             if (session != null) {
                 session.setAccessToken(newAccessToken);
@@ -211,12 +212,12 @@ public class AuthService {
      */
     public User validateAccessToken(String accessToken) {
         try {
-            Jwt jwt = validateAccessToken(accessToken);
-            if (jwt == null) {
+            Claims claims = parseAccessToken(accessToken);
+            if (claims == null) {
                 return null;
             }
 
-            String userId = jwt.getSubject();
+            String userId = claims.getSubject();
             User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
             if (user == null) {
                 return null;
@@ -228,7 +229,7 @@ public class AuthService {
             }
 
             // Vérification de la session
-            String sessionId = jwt.getClaim("sessionId");
+            String sessionId = claims.get("sessionId", String.class);
             UserSession session = activeSessions.get(sessionId);
             if (session == null || session.isExpired()) {
                 return null;
@@ -518,18 +519,24 @@ public class AuthService {
         }
     }
 
-    private Jwt validateAccessToken(String accessToken) {
+    private Claims parseAccessToken(String accessToken) {
         try {
-            return jwtDecoder.decode(accessToken);
-        } catch (JwtException e) {
+            return Jwts.parser()
+                    .setSigningKey(Keys.hmacShaKeyFor(jwtSecret.getBytes()))
+                    .parseClaimsJws(accessToken)
+                    .getBody();
+        } catch (Exception e) {
             return null;
         }
     }
 
-    private Jwt validateRefreshToken(String refreshToken) {
+    private Claims parseRefreshToken(String refreshToken) {
         try {
-            return jwtDecoder.decode(refreshToken);
-        } catch (JwtException e) {
+            return Jwts.parser()
+                    .setSigningKey(Keys.hmacShaKeyFor(jwtSecret.getBytes()))
+                    .parseClaimsJws(refreshToken)
+                    .getBody();
+        } catch (Exception e) {
             return null;
         }
     }

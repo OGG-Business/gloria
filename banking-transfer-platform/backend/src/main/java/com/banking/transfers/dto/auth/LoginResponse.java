@@ -113,6 +113,16 @@ public class LoginResponse {
         this.expiresAt = expiresAt;
     }
 
+    public void setTokenExpiresAt(LocalDateTime tokenExpiresAt) {
+        this.expiresAt = tokenExpiresAt;
+    }
+
+    public void calculateExpiresIn() {
+        if (this.expiresAt != null) {
+            this.expiresIn = java.time.Duration.between(LocalDateTime.now(), this.expiresAt).getSeconds();
+        }
+    }
+
     public String getScope() {
         return scope;
     }
@@ -359,6 +369,17 @@ public class LoginResponse {
 
     public void setRequiredActions(List<String> requiredActions) {
         this.requiredActions = requiredActions;
+    }
+
+    public void setError(String error) {
+        this.message = error;
+    }
+
+    public void setErrorDescription(String errorDescription) {
+        if (this.warnings == null) {
+            this.warnings = new java.util.ArrayList<>();
+        }
+        this.warnings.add(errorDescription);
     }
 
     // Méthodes utilitaires

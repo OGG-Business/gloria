@@ -157,6 +157,12 @@ public class User {
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 
+    @Column(name = "preferred_language", length = 10)
+    private String preferredLanguage = "fr";
+
+    @Column(name = "timezone", length = 50)
+    private String timezone = "Europe/Paris";
+
     // Constructeurs
     public User() {}
 
@@ -463,6 +469,22 @@ public class User {
 
     public void setUpdatedBy(String updatedBy) {
         this.updatedBy = updatedBy;
+    }
+
+    public String getPreferredLanguage() {
+        return preferredLanguage;
+    }
+
+    public void setPreferredLanguage(String preferredLanguage) {
+        this.preferredLanguage = preferredLanguage;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
     }
 
     // Méthodes utilitaires
