@@ -1,4 +1,4 @@
 from fastapi import APIRouter
 router = APIRouter()
 @router.get('/test')
-def test(): return {'message': 'Transfers working'}
+def test(): return {'message': 'Admin working'}
