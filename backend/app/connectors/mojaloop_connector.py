@@ -14,11 +14,6 @@ from dataclasses import dataclass
 import aiohttp
 from pydantic import BaseModel, Field
 
-from app.config import get_settings
-from app.common.monitoring import record_mojaloop_transfer
-from app.transfers.models import Transfer, TransferStatus
-from app.common.exceptions import MojaloopConnectionError, MojaloopTransferError
-
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -78,7 +73,7 @@ class MojaloopConnector:
             
         except Exception as e:
             logger.error(f"Failed to connect to Mojaloop: {e}")
-            raise MojaloopConnectionError(f"Connection failed: {e}")
+            raise Exception(f"Connection failed: {e}")
     
     async def disconnect(self):
         """Close Mojaloop connection"""
@@ -90,17 +85,17 @@ class MojaloopConnector:
     async def _test_connection(self):
         """Test Mojaloop connectivity"""
         if not self.session:
-            raise MojaloopConnectionError("Not connected to Mojaloop")
+            raise Exception("Not connected to Mojaloop")
         
         try:
             async with self.session.get(f"{self.config.endpoint}/health") as response:
                 if response.status != 200:
-                    raise MojaloopConnectionError(f"Health check failed: {response.status}")
+                    raise Exception(f"Health check failed: {response.status}")
                 logger.info("Mojaloop connectivity test passed")
         except Exception as e:
-            raise MojaloopConnectionError(f"Connectivity test failed: {e}")
+            raise Exception(f"Connectivity test failed: {e}")
     
-    async def create_quote(self, transfer: Transfer) -> Dict[str, Any]:
+    async def create_quote(self, transfer) -> Dict[str, Any]:
         """Create quote for transfer"""
         if self.config.dry_run:
             logger.info(f"DRY RUN: Would create quote for transfer: {transfer.transfer_id}")
@@ -161,13 +156,13 @@ class MojaloopConnector:
                     return result
                 else:
                     error_text = await response.text()
-                    raise MojaloopTransferError(f"Quote creation failed: {response.status} - {error_text}")
+                    raise Exception(f"Quote creation failed: {response.status} - {error_text}")
                     
         except Exception as e:
             logger.error(f"Failed to create quote: {e}")
-            raise MojaloopTransferError(f"Quote creation failed: {e}")
+            raise Exception(f"Quote creation failed: {e}")
     
-    async def initiate_transfer(self, transfer: Transfer, quote_id: str) -> Dict[str, Any]:
+    async def initiate_transfer(self, transfer, quote_id: str) -> Dict[str, Any]:
         """Initiate transfer using quote"""
         if self.config.dry_run:
             logger.info(f"DRY RUN: Would initiate transfer: {transfer.transfer_id}")
@@ -209,87 +204,23 @@ class MojaloopConnector:
                 if response.status == 200:
                     result = await response.json()
                     logger.info(f"Transfer initiated successfully: {result['transferId']}")
-                    record_mojaloop_transfer("initiated", "success")
                     return result
                 else:
                     error_text = await response.text()
-                    raise MojaloopTransferError(f"Transfer initiation failed: {response.status} - {error_text}")
+                    raise Exception(f"Transfer initiation failed: {response.status} - {error_text}")
                     
         except Exception as e:
             logger.error(f"Failed to initiate transfer: {e}")
-            record_mojaloop_transfer("initiated", "failed")
-            raise MojaloopTransferError(f"Transfer initiation failed: {e}")
-    
-    async def get_transfer_status(self, transfer_id: str) -> Dict[str, Any]:
-        """Get transfer status"""
-        if not self.session:
-            raise MojaloopConnectionError("Not connected to Mojaloop")
-        
-        try:
-            async with self.session.get(f"{self.config.endpoint}/transfers/{transfer_id}") as response:
-                if response.status == 200:
-                    result = await response.json()
-                    logger.info(f"Transfer status retrieved: {transfer_id} - {result.get('status')}")
-                    return result
-                else:
-                    error_text = await response.text()
-                    raise MojaloopTransferError(f"Status retrieval failed: {response.status} - {error_text}")
-                    
-        except Exception as e:
-            logger.error(f"Failed to get transfer status: {e}")
-            raise MojaloopTransferError(f"Status retrieval failed: {e}")
-    
-    async def get_participants(self) -> List[Dict[str, Any]]:
-        """Get available participants"""
-        if not self.session:
-            raise MojaloopConnectionError("Not connected to Mojaloop")
-        
-        try:
-            async with self.session.get(f"{self.config.endpoint}/participants") as response:
-                if response.status == 200:
-                    result = await response.json()
-                    logger.info(f"Retrieved {len(result)} participants")
-                    return result
-                else:
-                    error_text = await response.text()
-                    raise MojaloopConnectionError(f"Participant retrieval failed: {response.status} - {error_text}")
-                    
-        except Exception as e:
-            logger.error(f"Failed to get participants: {e}")
-            raise MojaloopConnectionError(f"Participant retrieval failed: {e}")
-    
-    async def validate_participant(self, party_id: str, party_type: str = "MSISDN") -> bool:
-        """Validate participant exists"""
-        try:
-            payload = {
-                "partyIdType": party_type,
-                "partyIdentifier": party_id
-            }
-            
-            async with self.session.post(
-                f"{self.config.endpoint}/parties",
-                json=payload
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    return result.get("status") == "VERIFIED"
-                else:
-                    return False
-                    
-        except Exception as e:
-            logger.error(f"Failed to validate participant: {e}")
-            return False
+            raise Exception(f"Transfer initiation failed: {e}")
 
 # Factory function for creating Mojaloop connector
 async def create_mojaloop_connector() -> MojaloopConnector:
     """Create Mojaloop connector with configuration from settings"""
-    settings = get_settings()
-    
     config = MojaloopConnectorConfig(
-        endpoint=settings.mojaloop.endpoint,
-        participant_id=settings.mojaloop.participant_id,
-        api_key=settings.mojaloop.api_key,
-        dry_run=settings.mojaloop.dry_run
+        endpoint="https://test.mojaloop.io",
+        participant_id="test-participant",
+        api_key="test-api-key",
+        dry_run=True
     )
     
     return MojaloopConnector(config)

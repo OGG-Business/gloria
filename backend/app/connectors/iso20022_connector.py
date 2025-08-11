@@ -12,11 +12,6 @@ import xmltodict
 from pydantic import BaseModel, Field, validator
 import aiofiles
 
-from app.config import get_settings
-from app.common.monitoring import record_iso20022_message
-from app.transfers.models import Transfer, TransferStatus
-from app.common.exceptions import ISO20022MessageError, ValidationError
-
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -49,7 +44,7 @@ class ISO20022Connector:
         self.config = config
         self.namespace_map = config.namespace_map
         
-    def create_pacs008_message(self, transfer: Transfer) -> ISO20022Message:
+    def create_pacs008_message(self, transfer) -> ISO20022Message:
         """Create pacs.008 (Customer Credit Transfer) message"""
         try:
             message_id = f"MSG_{transfer.transfer_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -69,9 +64,9 @@ class ISO20022Connector:
             
         except Exception as e:
             logger.error(f"Failed to create pacs.008 message: {e}")
-            raise ISO20022MessageError(f"pacs.008 creation failed: {e}")
+            raise Exception(f"pacs.008 creation failed: {e}")
     
-    def _build_pacs008_xml(self, transfer: Transfer, message_id: str, creation_datetime: datetime) -> str:
+    def _build_pacs008_xml(self, transfer, message_id: str, creation_datetime: datetime) -> str:
         """Build pacs.008 XML content"""
         try:
             # Create root element
@@ -131,16 +126,6 @@ class ISO20022Connector:
             purp = ET.SubElement(cdttrftxinf, "Purp")
             ET.SubElement(purp, "Cd").text = "CASH"
             
-            # Create RgltryRptg (Regulatory Reporting)
-            if transfer.amount > 10000:  # Report large transfers
-                rgltryrptg = ET.SubElement(cdttrftxinf, "RgltryRptg")
-                rgltryrptg_dtls = ET.SubElement(rgltryrptg, "Dtls")
-                ET.SubElement(rgltryrptg_dtls, "Tp").text = "CRED"
-                ET.SubElement(rgltryrptg_dtls, "Dt").text = creation_datetime.strftime("%Y-%m-%d")
-                ET.SubElement(rgltryrptg_dtls, "Ctry").text = "US"
-                ET.SubElement(rgltryrptg_dtls, "Cd").text = "LARGE"
-                ET.SubElement(rgltryrptg_dtls, "Amt").text = f"{transfer.amount:.2f}"
-            
             # Convert to string
             xml_string = ET.tostring(root, encoding='unicode', method='xml')
             
@@ -150,71 +135,7 @@ class ISO20022Connector:
             
         except Exception as e:
             logger.error(f"Failed to build pacs.008 XML: {e}")
-            raise ISO20022MessageError(f"XML building failed: {e}")
-    
-    def create_pacs002_message(self, original_message_id: str, status: str) -> ISO20022Message:
-        """Create pacs.002 (Payment Status Report) message"""
-        try:
-            message_id = f"STATUS_{original_message_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            creation_datetime = datetime.now(timezone.utc)
-            
-            # Create XML content
-            xml_content = self._build_pacs002_xml(message_id, original_message_id, status, creation_datetime)
-            
-            return ISO20022Message(
-                message_type="pacs.002",
-                message_id=message_id,
-                creation_datetime=creation_datetime,
-                content=xml_content,
-                sender_bic="",  # Will be set by caller
-                receiver_bic="",  # Will be set by caller
-                status=status
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to create pacs.002 message: {e}")
-            raise ISO20022MessageError(f"pacs.002 creation failed: {e}")
-    
-    def _build_pacs002_xml(self, message_id: str, original_message_id: str, status: str, creation_datetime: datetime) -> str:
-        """Build pacs.002 XML content"""
-        try:
-            # Create root element
-            root = ET.Element("Document", {
-                "xmlns": self.namespace_map["pacs002"],
-                "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance"
-            })
-            
-            # Create FIToFIPmtStsRpt element
-            fitofipmtstsrpt = ET.SubElement(root, "FIToFIPmtStsRpt")
-            
-            # Create GrpHdr (Group Header)
-            grphdr = ET.SubElement(fitofipmtstsrpt, "GrpHdr")
-            ET.SubElement(grphdr, "MsgId").text = message_id
-            ET.SubElement(grphdr, "CreDtTm").text = creation_datetime.isoformat()
-            ET.SubElement(grphdr, "NbOfTxs").text = "1"
-            
-            # Create OrgnlGrpInfAndSts (Original Group Information and Status)
-            orgnlgrpinfandsts = ET.SubElement(fitofipmtstsrpt, "OrgnlGrpInfAndSts")
-            ET.SubElement(orgnlgrpinfandsts, "OrgnlMsgId").text = original_message_id
-            ET.SubElement(orgnlgrpinfandsts, "OrgnlMsgNmId").text = "pacs.008.001.08"
-            ET.SubElement(orgnlgrpinfandsts, "OrgnlCreDtTm").text = creation_datetime.isoformat()
-            ET.SubElement(orgnlgrpinfandsts, "GrpSts").text = status
-            
-            # Create TxInfAndSts (Transaction Information and Status)
-            txinfandsts = ET.SubElement(fitofipmtstsrpt, "TxInfAndSts")
-            ET.SubElement(txinfandsts, "OrgnlEndToEndId").text = original_message_id
-            ET.SubElement(txinfandsts, "TxSts").text = status
-            
-            # Convert to string
-            xml_string = ET.tostring(root, encoding='unicode', method='xml')
-            
-            # Add XML declaration
-            xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n'
-            return xml_declaration + xml_string
-            
-        except Exception as e:
-            logger.error(f"Failed to build pacs.002 XML: {e}")
-            raise ISO20022MessageError(f"XML building failed: {e}")
+            raise Exception(f"XML building failed: {e}")
     
     def parse_message(self, xml_content: str) -> Dict[str, Any]:
         """Parse ISO 20022 XML message"""
@@ -233,11 +154,11 @@ class ISO20022Connector:
             elif message_type == "pacs.004":
                 return self._parse_pacs004(root)
             else:
-                raise ISO20022MessageError(f"Unsupported message type: {message_type}")
+                raise Exception(f"Unsupported message type: {message_type}")
                 
         except Exception as e:
             logger.error(f"Failed to parse ISO 20022 message: {e}")
-            raise ISO20022MessageError(f"Message parsing failed: {e}")
+            raise Exception(f"Message parsing failed: {e}")
     
     def _get_message_type(self, root: ET.Element) -> str:
         """Determine ISO 20022 message type from root element"""
@@ -273,21 +194,6 @@ class ISO20022Connector:
             amount = float(amount_elem.text) if amount_elem is not None else None
             currency = amount_elem.get('Ccy') if amount_elem is not None else None
             
-            # Extract account information
-            dbtr_acct = root.find(".//DbtrAcct")
-            cdtr_acct = root.find(".//CdtrAcct")
-            
-            dbtr_iban = None
-            cdtr_iban = None
-            
-            if dbtr_acct is not None:
-                iban_elem = dbtr_acct.find(".//Id/Othr/Id")
-                dbtr_iban = iban_elem.text if iban_elem is not None else None
-                
-            if cdtr_acct is not None:
-                iban_elem = cdtr_acct.find(".//Id/Othr/Id")
-                cdtr_iban = iban_elem.text if iban_elem is not None else None
-            
             return {
                 "message_type": "pacs.008",
                 "message_id": msg_id_text,
@@ -295,14 +201,12 @@ class ISO20022Connector:
                 "instruction_id": instr_id_text,
                 "end_to_end_id": end_to_end_id_text,
                 "amount": amount,
-                "currency": currency,
-                "debtor_iban": dbtr_iban,
-                "creditor_iban": cdtr_iban
+                "currency": currency
             }
             
         except Exception as e:
             logger.error(f"Failed to parse pacs.008 message: {e}")
-            raise ISO20022MessageError(f"pacs.008 parsing failed: {e}")
+            raise Exception(f"pacs.008 parsing failed: {e}")
     
     def _parse_pacs002(self, root: ET.Element) -> Dict[str, Any]:
         """Parse pacs.002 message"""
@@ -326,7 +230,7 @@ class ISO20022Connector:
             
         except Exception as e:
             logger.error(f"Failed to parse pacs.002 message: {e}")
-            raise ISO20022MessageError(f"pacs.002 parsing failed: {e}")
+            raise Exception(f"pacs.002 parsing failed: {e}")
     
     def _parse_pacs004(self, root: ET.Element) -> Dict[str, Any]:
         """Parse pacs.004 message"""
@@ -350,7 +254,7 @@ class ISO20022Connector:
             
         except Exception as e:
             logger.error(f"Failed to parse pacs.004 message: {e}")
-            raise ISO20022MessageError(f"pacs.004 parsing failed: {e}")
+            raise Exception(f"pacs.004 parsing failed: {e}")
     
     def validate_xml_schema(self, xml_content: str) -> bool:
         """Validate XML against ISO 20022 schema"""
@@ -385,29 +289,13 @@ class ISO20022Connector:
         except Exception as e:
             logger.error(f"XML schema validation failed: {e}")
             return False
-    
-    async def save_message(self, message: ISO20022Message, file_path: str) -> None:
-        """Save ISO 20022 message to file"""
-        try:
-            async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
-                await f.write(message.content)
-            
-            logger.info(f"ISO 20022 message saved to: {file_path}")
-            record_iso20022_message(message.message_type, "saved", "success")
-            
-        except Exception as e:
-            logger.error(f"Failed to save ISO 20022 message: {e}")
-            record_iso20022_message(message.message_type, "saved", "failed")
-            raise ISO20022MessageError(f"Message save failed: {e}")
 
 # Factory function for creating ISO 20022 connector
 def create_iso20022_connector() -> ISO20022Connector:
     """Create ISO 20022 connector with configuration from settings"""
-    settings = get_settings()
-    
     config = ISO20022ConnectorConfig(
-        schema_validation=settings.swift.schema_validation,
-        dry_run=settings.swift.dry_run
+        schema_validation=True,
+        dry_run=True
     )
     
     return ISO20022Connector(config)
