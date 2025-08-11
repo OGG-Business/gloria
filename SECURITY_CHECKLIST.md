@@ -1,0 +1,33 @@
+# Security & Compliance Checklist (Pre-Production)
+
+- Identity & Access
+  - [ ] OIDC configured (Keycloak or Google Identity) with proper audiences
+  - [ ] MFA enforced for admin roles
+  - [ ] Principle of least privilege for service accounts
+- Secrets
+  - [ ] Secrets stored in Vault or GSM, never in repo
+  - [ ] Key rotation policy documented and tested
+  - [ ] KMS-backed encryption for stored secrets
+- Network
+  - [ ] TLS 1.3 enforced end-to-end, managed certs via GCM
+  - [ ] IP allowlists for bank endpoints
+  - [ ] mTLS for SWIFT REST where required
+- Data Protection
+  - [ ] AES-256-GCM app master key in Vault/GSM
+  - [ ] Encrypted KYC documents at rest and in transit
+  - [ ] Backups and retention policies tested
+- Compliance
+  - [ ] AML rule: auto-block > 10k USD configured
+  - [ ] Sanctions screening enabled (public data or vendor)
+  - [ ] Audit logs append-only, retained per regulation
+- Observability
+  - [ ] Metrics exported to Cloud Monitoring/Prometheus
+  - [ ] Centralized logs with retention and alerts
+  - [ ] Dashboards for latency, error rate, saturation
+- SDLC
+  - [ ] CI pipelines include lint, tests, SCA (Snyk/OWASP)
+  - [ ] Dependency pinning and renovation
+  - [ ] Infra as Code reviewed (Helm)
+- DR & Business Continuity
+  - [ ] Multi-zone deploy and backups
+  - [ ] Runbooks for incidents and bank outages

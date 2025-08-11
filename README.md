@@ -1,105 +1,44 @@
-# AutoGPT: build & use AI agents
+# Open Payments Hub (SWIFT/ISO 20022/Mojaloop)
 
-[![Discord Follow](https://dcbadge.vercel.app/api/server/autogpt?style=flat)](https://discord.gg/autogpt) &ensp;
-[![Twitter Follow](https://img.shields.io/twitter/follow/Auto_GPT?style=social)](https://twitter.com/Auto_GPT) &ensp;
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Production-ready, cloud-native hub to initiate, track, and manage bank transfers (IBAN/BIC) with ISO 20022 `pacs.008` support, Mojaloop corridors, and pluggable SWIFT adapters. Includes FastAPI backend, React PWA frontend, PostgreSQL (Cloud SQL-ready), Flyway migrations, Docker/Helm, Prometheus/Grafana, and CI hooks.
 
-**AutoGPT** is a generalist LLM based AI agent that can autonomously accomplish minor tasks. 
+## Quick start (dev)
 
-**Examples**:
+- Prereqs: Docker, Docker Compose
+- Start: `docker-compose up --build`
+- Backend: http://localhost:8000/health
+- Frontend: http://localhost:5173
 
-- Look up and summarize this research paper
-- Write a marketing for food supplements
-- Write a blog post detailing the news in AI
+## Services
+- Auth: OIDC via Google or Keycloak (dev mode disables auth)
+- Accounts: Manage IBAN/BIC accounts
+- Transfers: Create and track transfers with events and SSE
+- Connectors: SWIFT (REST/mTLS stub), Mojaloop
+- KYC: Encrypted document storage (AES-256-GCM via Vault/GSM/env)
+- Audit: Append-only logs with trace id
+- Observability: Prometheus + Grafana
 
-Our mission is to provide the tools, so that you can focus on what matters:
+## Endpoints
+- /auth, /accounts, /transfers, /transfers/{id}/events, /kyc, /admin, /hooks
 
-- 🏗️ **Building** - Lay the foundation for something amazing.
-- 🧪 **Testing** - Fine-tune your agent to perfection.
-- 🤝 **Delegating** - Let AI work for you, and have your ideas come to life.
+## Security & Compliance
+- OAuth2/OIDC with MFA for admins (via IdP)
+- TLS 1.3 (Cloud run/GKE ingress), certs via Certificate Manager
+- KYC/AML: auto-block > 10k USD (configurable), sanctions screening hooks
+- Secrets: Vault or Google Secret Manager (never commit secrets)
+- Dry-run mode prevents real payments during tests
 
-Be part of the revolution! **AutoGPT** is here to stay, at the forefront of AI innovation.
+## ISO 20022
+- Minimal `pacs.008` builder under `backend/app/iso20022/`
+- Mapping to MT variants is stubbed; extend parsers/serializers as needed
 
-**📖 [Documentation](https://docs.agpt.co)**
-&ensp;|&ensp;
-**🚀 [Contributing](CONTRIBUTING.md)**
-&ensp;|&ensp;
-**🛠️ [Build your own Agent - Quickstart](FORGE-QUICKSTART.md)**
+## Deploy
+- Cloud Run: Build backend and frontend images; deploy with env vars and GSM/Vault
+- GKE: Use Helm chart in `helm/`
 
-## 🧱 Building blocks
+## Constraints
+- No real transfers without bank credentials, certificates, and written approval
+- Secrets must be in Vault/GSM; `.env` only for local dev
+- Dry-run default true
 
-### 🏗️ Forge
-
-**Forge your own agent!** &ndash; Forge is a ready-to-go template for your agent application. All the boilerplate code is already handled, letting you channel all your creativity into the things that set *your* agent apart. All tutorials are located [here](https://medium.com/@aiedge/autogpt-forge-e3de53cc58ec). Components from the [`forge.sdk`](/forge/forge/sdk) can also be used individually to speed up development and reduce boilerplate in your agent project.
-
-🚀 [**Getting Started with Forge**](https://github.com/Significant-Gravitas/AutoGPT/blob/master/forge/tutorials/001_getting_started.md) &ndash;
-This guide will walk you through the process of creating your own agent and using the benchmark and user interface.
-
-📘 [Learn More](https://github.com/Significant-Gravitas/AutoGPT/tree/master/forge) about Forge
-
-### 🎯 Benchmark
-
-**Measure your agent's performance!** The `agbenchmark` can be used with any agent that supports the agent protocol, and the integration with the project's [CLI] makes it even easier to use with AutoGPT and forge-based agents. The benchmark offers a stringent testing environment. Our framework allows for autonomous, objective performance evaluations, ensuring your agents are primed for real-world action.
-
-<!-- TODO: insert visual demonstrating the benchmark -->
-
-📦 [`agbenchmark`](https://pypi.org/project/agbenchmark/) on Pypi
-&ensp;|&ensp;
-📘 [Learn More](https://github.com/Significant-Gravitas/AutoGPT/blob/master/benchmark) about the Benchmark
-
-### 💻 UI
-
-**Makes agents easy to use!** The `frontend` gives you a user-friendly interface to control and monitor your agents. It connects to agents through the [agent protocol](#-agent-protocol), ensuring compatibility with many agents from both inside and outside of our ecosystem.
-
-<!-- TODO: insert screenshot of front end -->
-
-The frontend works out-of-the-box with all agents in the repo. Just use the [CLI] to run your agent of choice!
-
-📘 [Learn More](https://github.com/Significant-Gravitas/AutoGPT/tree/master/frontend) about the Frontend
-
-### ⌨️ CLI
-
-[CLI]: #-cli
-
-To make it as easy as possible to use all of the tools offered by the repository, a CLI is included at the root of the repo:
-
-```shell
-$ ./run
-Usage: cli.py [OPTIONS] COMMAND [ARGS]...
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  agent      Commands to create, start and stop agents
-  benchmark  Commands to start the benchmark and list tests and categories
-  setup      Installs dependencies needed for your system.
-```
-
-Just clone the repo, install dependencies with `./run setup`, and you should be good to go!
-
-## 🤔 Questions? Problems? Suggestions?
-
-### Get help - [Discord 💬](https://discord.gg/autogpt)
-
-[![Join us on Discord](https://invidget.switchblade.xyz/autogpt)](https://discord.gg/autogpt)
-
-To report a bug or request a feature, create a [GitHub Issue](https://github.com/Significant-Gravitas/AutoGPT/issues/new/choose). Please ensure someone else hasn’t created an issue for the same topic.
-
-## 🤝 Sister projects
-
-### 🔄 Agent Protocol
-
-To maintain a uniform standard and ensure seamless compatibility with many current and future applications, AutoGPT employs the [agent protocol](https://agentprotocol.ai/) standard by the AI Engineer Foundation. This standardizes the communication pathways from your agent to the frontend and benchmark.
-
----
-
-<p align="center">
-<a href="https://star-history.com/#Significant-Gravitas/AutoGPT">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Significant-Gravitas/AutoGPT&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Significant-Gravitas/AutoGPT&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Significant-Gravitas/AutoGPT&type=Date" />
-  </picture>
-</a>
-</p>
+See `ONBOARDING_SWIFT.md` and `SECURITY_CHECKLIST.md`.

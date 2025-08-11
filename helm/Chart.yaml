@@ -1,0 +1,6 @@
+apiVersion: v2
+name: open-payments-hub
+version: 0.1.0
+appVersion: "0.1.0"
+description: Cloud-native payments hub (backend + frontend)
+type: application
