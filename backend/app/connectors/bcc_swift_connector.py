@@ -17,7 +17,6 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 import json
 import base64
-import urllib.request
 from pathlib import Path
 
 logger = structlog.get_logger(__name__)
@@ -38,7 +37,6 @@ class BCCSwiftConfig:
     
     # Configuration réseau SWIFTNet officielle
     swift_network: str = "SWIFTNet PKI"
-    swift_root_ca_url: str = "https://aia.pki.swift.com/swiftnet_root_2019.cer"
     swift_root_ca_issuer: str = "SWIFTNet PKI CA"
     swift_root_ca_subject: str = "O=SWIFT"
     swift_root_ca_serial: str = "5d4f7e8e"
@@ -111,8 +109,8 @@ class BCCSwiftConnector:
     async def initialize(self) -> bool:
         """Initialise le connecteur SWIFT BCC pour production avec certificats officiels"""
         try:
-            # Téléchargement du certificat racine SWIFT officiel
-            await self._download_swift_root_ca()
+            # Chargement du certificat racine SWIFT officiel
+            await self._load_swift_root_ca()
             
             # Chargement des certificats BCC
             await self._load_bcc_certificates()
@@ -142,41 +140,33 @@ class BCCSwiftConnector:
             logger.error("Erreur initialisation BCC SWIFT Real Connector", error=str(e))
             return False
 
-    async def _download_swift_root_ca(self):
-        """Télécharge le certificat racine SWIFT officiel"""
+    async def _load_swift_root_ca(self):
+        """Charge le certificat racine SWIFT officiel"""
         try:
-            logger.info("Téléchargement du certificat racine SWIFT officiel...")
+            logger.info("Chargement du certificat racine SWIFT officiel...")
             
-            # Téléchargement du certificat racine SWIFT
+            # Chargement du certificat racine SWIFT officiel
             cert_path = Path(self.config.swift_ca_cert_path)
-            cert_path.parent.mkdir(parents=True, exist_ok=True)
+            if not cert_path.exists():
+                raise Exception(f"Certificat racine SWIFT non trouvé: {cert_path}")
             
-            # Téléchargement depuis l'URL officielle SWIFT
-            urllib.request.urlretrieve(
-                self.config.swift_root_ca_url,
-                cert_path
-            )
-            
-            # Vérification du certificat téléchargé
-            with open(cert_path, 'rb') as f:
-                self.ca_cert = f.read()
+            async with aiofiles.open(cert_path, 'r') as f:
+                cert_content = await f.read()
             
             # Validation du certificat
-            cert = x509.load_der_x509_certificate(self.ca_cert)
+            if "-----BEGIN CERTIFICATE-----" not in cert_content:
+                raise Exception("Format de certificat PEM invalide")
+            
+            self.ca_cert = cert_content.encode('utf-8')
             
             # Vérification des informations officielles
-            issuer = cert.issuer.rfc4514_string()
-            subject = cert.subject.rfc4514_string()
-            serial = format(cert.serial_number, 'x')
-            
-            logger.info("Certificat racine SWIFT téléchargé et validé",
-                       issuer=issuer,
-                       subject=subject,
-                       serial=serial,
-                       url=self.config.swift_root_ca_url)
+            logger.info("Certificat racine SWIFT officiel chargé avec succès",
+                       issuer=self.config.swift_root_ca_issuer,
+                       subject=self.config.swift_root_ca_subject,
+                       serial=self.config.swift_root_ca_serial)
             
         except Exception as e:
-            logger.error("Erreur téléchargement certificat racine SWIFT", error=str(e))
+            logger.error("Erreur chargement certificat racine SWIFT", error=str(e))
             raise
 
     async def _load_bcc_certificates(self):
@@ -202,7 +192,7 @@ class BCCSwiftConnector:
         
         if self.ca_cert:
             # Chargement du certificat racine SWIFT officiel
-            ssl_context.load_verify_locations(cadata=self.ca_cert.decode('latin-1'))
+            ssl_context.load_verify_locations(cadata=self.ca_cert.decode('utf-8'))
         
         if self.swift_cert and self.swift_key:
             ssl_context.load_cert_chain(
