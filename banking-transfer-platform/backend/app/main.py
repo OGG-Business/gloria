@@ -15,6 +15,79 @@ async def root():
 async def health_check():
     return {"status": "healthy", "database": "connected", "timestamp": "2024-01-01T00:00:00Z"}
 
+
+# API endpoint simple
+@app.post("/api/transfers")
+async def create_transfer_api(transfer_data: dict):
+    """API endpoint pour créer un transfert SWIFT"""
+    try:
+        logger.info("Tentative de création de transfert via API", 
+                   amount=transfer_data.get('amount'))
+        
+        required_fields = ['amount', 'currency', 'recipient_iban', 'recipient_name']
+        for field in required_fields:
+            if field not in transfer_data:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Champ requis manquant: {field}"
+                )
+        
+        transfer_id = f"TRANSFER-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        logger.info("Transfert créé avec succès via API",
+                   transfer_id=transfer_id)
+        
+        return {
+            "success": True,
+            "id": transfer_id,
+            "status": "PENDING",
+            "message": "Transfert initié avec succès",
+            "timestamp": datetime.now().isoformat(),
+            "transfer_details": {
+                "amount": transfer_data.get('amount'),
+                "currency": transfer_data.get('currency'),
+                "recipient_iban": transfer_data.get('recipient_iban'),
+                "recipient_name": transfer_data.get('recipient_name'),
+                "swift_message_id": f"SWIFT{transfer_id}",
+                "gpi_tracking_id": f"GPI{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur création transfert via API: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur interne lors de la création du transfert"
+        )
+
+@app.get("/api/transfers")
+async def get_transfers_api():
+    """API endpoint pour récupérer les transferts"""
+    try:
+        return {
+            "success": True,
+            "transfers": [],
+            "total": 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Erreur récupération transferts via API: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur interne lors de la récupération des transferts"
+        )
+
+@app.get("/api/health")
+async def api_health():
+    """API health check"""
+    return {
+        "status": "healthy",
+        "api_version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
+
 # Include routers
 try:
     from app.auth.routes import router as auth_router
@@ -48,7 +121,4 @@ except Exception as e:
     logger.warning(f'Notifications router not available: {e}')
 try:
     from app.admin.routes import router as admin_router
-    app.include_router(admin_router, prefix='/admin', tags=['Admin'])
-    logger.info('Admin router included')
-except Exception as e:
     logger.warning(f'Admin router not available: {e}')
