@@ -1,0 +1,86 @@
+
+INSTRUCTIONS POUR TRANSFERT SWIFT RÉEL
+=====================================
+
+BANQUE: BCC (Banque Commerciale du Congo)
+MONTANT: 777.00 USD
+RÉFÉRENCE: M40282987
+
+DESTINATAIRE:
+- Nom: Monese Ltd
+- IBAN: EE047700771001660150
+- BIC: LHVBEE22
+- Adresse: LHV Bank, Tartu mnt 2, 10145 Tallinn, Estonia
+
+MESSAGE SWIFT MT103:
+MT103
+ 01:BCCRCD22
+ 02:O103250812BCCRCD22N
+ 03:LHVBEE22
+ 04:20:M40282987
+ 04:23B:CRED
+ 04:32A:250812USD777,00
+ 04:50K:/CD12345678901234567890
+ Compte BCC
+ 04:59:/EE047700771001660150
+ Monese Ltd
+ 04:70:Transfert personnel
+ 04:71A:SHA
+ 04:71F:0,78USD
+ 04:72:/INS/LHVBEE22
+ -
+
+MESSAGE ISO 20022:
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.10">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>SWIFTBCC-MONESE-20250812071522</MsgId>
+      <CreDtTm>2025-08-12T07:15:22.522595</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>777.00</CtrlSum>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <InstrId>BCC-MONESE-20250812071522</InstrId>
+        <EndToEndId>M40282987</EndToEndId>
+      </PmtId>
+      <Amt>
+        <InstdAmt Ccy="USD">777.00</InstdAmt>
+      </Amt>
+      <IntrmyAgt1>
+        <FinInstnId>
+          <BICFI>BCCRCD22</BICFI>
+        </FinInstnId>
+      </IntrmyAgt1>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>LHVBEE22</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+      <CdtrAcct>
+        <Id>
+          <Othr>
+            <Id>EE047700771001660150</Id>
+          </Othr>
+        </Id>
+      </CdtrAcct>
+      <Cdtr>
+        <Nm>Monese Ltd</Nm>
+      </Cdtr>
+      <RmtInf>
+        <UETR>M40282987</UETR>
+      </RmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>
+
+ÉTAPES POUR VOTRE BANQUE:
+1. Vérifier les fonds disponibles
+2. Valider la conformité AML/KYC
+3. Envoyer le message SWIFT
+4. Confirmer l'ACK de réception
+5. Fournir le numéro de suivi GPI
+
+DÉLAI ESTIMÉ: 1-3 jours ouvrables
+FRAIS: Variables selon la banque
