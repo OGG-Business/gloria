@@ -1,258 +1,293 @@
 import React from 'react';
+import styled from 'styled-components';
+import { FiTrendingUp, FiTrendingDown, FiDollarSign, FiUsers } from 'react-icons/fi';
 import { useQuery } from 'react-query';
-import { motion } from 'framer-motion';
-import { 
-  FiTrendingUp, 
-  FiTrendingDown, 
-  FiDollarSign, 
-  FiCreditCard,
-  FiSend,
-  FiCheckCircle,
-  FiXCircle,
-  FiClock,
-  FiShield
-} from 'react-icons/fi';
-import { Helmet } from 'react-helmet-async';
-import { format } from 'date-fns';
+import axios from 'axios';
 
-import { useAuth } from '../hooks/useAuth';
-import apiService from '../services/api';
-import { DashboardStats, Transfer, TransferStatus } from '../types';
-import StatCard from '../components/dashboard/StatCard';
-import RecentTransfers from '../components/dashboard/RecentTransfers';
-import TransferChart from '../components/dashboard/TransferChart';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+const DashboardContainer = styled.div`
+  padding: 2rem;
+`;
+
+const Title = styled.h1`
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 2rem;
+`;
+
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+`;
+
+const StatCard = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+`;
+
+const StatHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+`;
+
+const StatTitle = styled.h3`
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #718096;
+  margin: 0;
+`;
+
+const StatIcon = styled.div<{ color: string }>`
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: ${props => props.color};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+`;
+
+const StatValue = styled.div`
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+`;
+
+const StatChange = styled.div<{ isPositive: boolean }>`
+  font-size: 0.875rem;
+  color: ${props => props.isPositive ? '#38a169' : '#e53e3e'};
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+`;
+
+const ContentGrid = styled.div`
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2rem;
+`;
+
+const ChartCard = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+`;
+
+const ChartTitle = styled.h3`
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 1rem;
+`;
+
+const RecentTransfersCard = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+`;
+
+const TransferItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid #e2e8f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const TransferInfo = styled.div`
+  flex: 1;
+`;
+
+const TransferAmount = styled.div<{ type: 'in' | 'out' }>`
+  font-weight: 600;
+  color: ${props => props.type === 'in' ? '#38a169' : '#e53e3e'};
+`;
+
+const TransferStatus = styled.span<{ status: string }>`
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: ${props => {
+    switch (props.status) {
+      case 'completed': return '#c6f6d5';
+      case 'pending': return '#fef5e7';
+      case 'failed': return '#fed7d7';
+      default: return '#e2e8f0';
+    }
+  }};
+  color: ${props => {
+    switch (props.status) {
+      case 'completed': return '#22543d';
+      case 'pending': return '#744210';
+      case 'failed': return '#742a2a';
+      default: return '#4a5568';
+    }
+  }};
+`;
 
 const Dashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { data: stats } = useQuery('dashboard-stats', async () => {
+    const response = await axios.get('/admin/stats');
+    return response.data;
+  });
 
-  // Fetch dashboard data
-  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>(
-    'dashboard-stats',
-    apiService.getDashboardStats,
-    {
-      refetchInterval: 30000, // Refetch every 30 seconds
-    }
-  );
+  const { data: recentTransfers } = useQuery('recent-transfers', async () => {
+    const response = await axios.get('/transfers?limit=5');
+    return response.data;
+  });
 
-  const { data: transfers, isLoading: transfersLoading } = useQuery<Transfer[]>(
-    'recent-transfers',
-    () => apiService.getTransfers({}, 1, 5).then(res => res.items),
-    {
-      refetchInterval: 30000,
-    }
-  );
-
-  const { data: chartData, isLoading: chartLoading } = useQuery(
-    'transfer-chart',
-    () => apiService.getTransferChartData('7d'),
-    {
-      refetchInterval: 60000, // Refetch every minute
-    }
-  );
-
-  if (statsLoading || transfersLoading || chartLoading) {
-    return <LoadingSpinner />;
-  }
-
-  const getStatusIcon = (status: TransferStatus) => {
-    switch (status) {
-      case TransferStatus.COMPLETED:
-        return <FiCheckCircle className="w-4 h-4 text-green-500" />;
-      case TransferStatus.FAILED:
-        return <FiXCircle className="w-4 h-4 text-red-500" />;
-      case TransferStatus.PENDING:
-      case TransferStatus.PROCESSING:
-        return <FiClock className="w-4 h-4 text-yellow-500" />;
-      default:
-        return <FiSend className="w-4 h-4 text-gray-500" />;
-    }
+  const mockStats = {
+    totalTransfers: 1247,
+    totalAmount: 2847500,
+    activeUsers: 89,
+    successRate: 98.5,
+    transfersChange: 12.5,
+    amountChange: -2.3,
+    usersChange: 5.7,
+    successChange: 1.2
   };
 
-  const getStatusColor = (status: TransferStatus) => {
-    switch (status) {
-      case TransferStatus.COMPLETED:
-        return 'text-green-600 bg-green-50';
-      case TransferStatus.FAILED:
-        return 'text-red-600 bg-red-50';
-      case TransferStatus.PENDING:
-      case TransferStatus.PROCESSING:
-        return 'text-yellow-600 bg-yellow-50';
-      default:
-        return 'text-gray-600 bg-gray-50';
+  const mockTransfers = [
+    {
+      id: '1',
+      amount: 50000,
+      currency: 'USD',
+      recipient: 'John Doe',
+      status: 'completed',
+      date: '2024-01-15T10:30:00Z'
+    },
+    {
+      id: '2',
+      amount: 25000,
+      currency: 'EUR',
+      recipient: 'Jane Smith',
+      status: 'pending',
+      date: '2024-01-15T09:15:00Z'
+    },
+    {
+      id: '3',
+      amount: 75000,
+      currency: 'CDF',
+      recipient: 'Bob Johnson',
+      status: 'completed',
+      date: '2024-01-15T08:45:00Z'
     }
-  };
+  ];
 
   return (
-    <>
-      <Helmet>
-        <title>Dashboard - Banking Transfer Platform</title>
-      </Helmet>
+    <DashboardContainer>
+      <Title>Tableau de bord</Title>
 
-      <div className="space-y-6">
-        {/* Welcome Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-lg shadow-sm p-6"
-        >
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome back, {user?.first_name}!
-          </h1>
-          <p className="text-gray-600">
-            Here's what's happening with your transfers today.
-          </p>
-        </motion.div>
+      <StatsGrid>
+        <StatCard>
+          <StatHeader>
+            <StatTitle>Total Transferts</StatTitle>
+            <StatIcon color="#3182ce">
+              <FiTrendingUp size={20} />
+            </StatIcon>
+          </StatHeader>
+          <StatValue>{mockStats.totalTransfers.toLocaleString()}</StatValue>
+          <StatChange isPositive={mockStats.transfersChange > 0}>
+            {mockStats.transfersChange > 0 ? <FiTrendingUp size={14} /> : <FiTrendingDown size={14} />}
+            {Math.abs(mockStats.transfersChange)}% ce mois
+          </StatChange>
+        </StatCard>
 
-        {/* Statistics Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-        >
-          <StatCard
-            title="Total Transfers"
-            value={stats?.total_transfers || 0}
-            icon={<FiSend className="w-6 h-6" />}
-            trend="up"
-            trendValue="12%"
-            color="blue"
-          />
-          
-          <StatCard
-            title="Total Amount"
-            value={`$${(stats?.total_amount || 0).toLocaleString()}`}
-            icon={<FiDollarSign className="w-6 h-6" />}
-            trend="up"
-            trendValue="8%"
-            color="green"
-          />
-          
-          <StatCard
-            title="Pending Transfers"
-            value={stats?.pending_transfers || 0}
-            icon={<FiClock className="w-6 h-6" />}
-            trend="down"
-            trendValue="5%"
-            color="yellow"
-          />
-          
-          <StatCard
-            title="Total Balance"
-            value={`$${(stats?.total_balance || 0).toLocaleString()}`}
-            icon={<FiCreditCard className="w-6 h-6" />}
-            trend="up"
-            trendValue="3%"
-            color="purple"
-          />
-        </motion.div>
+        <StatCard>
+          <StatHeader>
+            <StatTitle>Montant Total</StatTitle>
+            <StatIcon color="#38a169">
+              <FiDollarSign size={20} />
+            </StatIcon>
+          </StatHeader>
+          <StatValue>${(mockStats.totalAmount / 1000000).toFixed(1)}M</StatValue>
+          <StatChange isPositive={mockStats.amountChange > 0}>
+            {mockStats.amountChange > 0 ? <FiTrendingUp size={14} /> : <FiTrendingDown size={14} />}
+            {Math.abs(mockStats.amountChange)}% ce mois
+          </StatChange>
+        </StatCard>
 
-        {/* Charts and Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Transfer Chart */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white rounded-lg shadow-sm p-6"
-          >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Transfer Activity (Last 7 Days)
-            </h3>
-            <TransferChart data={chartData || []} />
-          </motion.div>
+        <StatCard>
+          <StatHeader>
+            <StatTitle>Utilisateurs Actifs</StatTitle>
+            <StatIcon color="#d69e2e">
+              <FiUsers size={20} />
+            </StatIcon>
+          </StatHeader>
+          <StatValue>{mockStats.activeUsers}</StatValue>
+          <StatChange isPositive={mockStats.usersChange > 0}>
+            {mockStats.usersChange > 0 ? <FiTrendingUp size={14} /> : <FiTrendingDown size={14} />}
+            {Math.abs(mockStats.usersChange)}% ce mois
+          </StatChange>
+        </StatCard>
 
-          {/* Recent Transfers */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white rounded-lg shadow-sm p-6"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Recent Transfers
-              </h3>
-              <a
-                href="/transfers"
-                className="text-sm text-blue-600 hover:text-blue-500 transition-colors"
-              >
-                View all
-              </a>
-            </div>
-            
-            <div className="space-y-4">
-              {transfers?.slice(0, 5).map((transfer) => (
-                <motion.div
-                  key={transfer.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center space-x-3">
-                    {getStatusIcon(transfer.status)}
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {transfer.beneficiary_name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {format(new Date(transfer.created_at), 'MMM dd, yyyy')}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="font-semibold text-gray-900">
-                      ${transfer.amount.toLocaleString()}
-                    </p>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(transfer.status)}`}>
-                      {transfer.status}
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
-              
-              {(!transfers || transfers.length === 0) && (
-                <div className="text-center py-8 text-gray-500">
-                  <FiSend className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                  <p>No recent transfers</p>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
+        <StatCard>
+          <StatHeader>
+            <StatTitle>Taux de Réussite</StatTitle>
+            <StatIcon color="#38a169">
+              <FiTrendingUp size={20} />
+            </StatIcon>
+          </StatHeader>
+          <StatValue>{mockStats.successRate}%</StatValue>
+          <StatChange isPositive={mockStats.successChange > 0}>
+            {mockStats.successChange > 0 ? <FiTrendingUp size={14} /> : <FiTrendingDown size={14} />}
+            {Math.abs(mockStats.successChange)}% ce mois
+          </StatChange>
+        </StatCard>
+      </StatsGrid>
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-lg shadow-sm p-6"
-        >
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Quick Actions
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="flex items-center justify-center p-4 border-2 border-blue-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
-              <FiSend className="w-5 h-5 text-blue-600 mr-2" />
-              <span className="font-medium text-blue-600">New Transfer</span>
-            </button>
-            
-            <button className="flex items-center justify-center p-4 border-2 border-green-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors">
-              <FiCreditCard className="w-5 h-5 text-green-600 mr-2" />
-              <span className="font-medium text-green-600">View Accounts</span>
-            </button>
-            
-            <button className="flex items-center justify-center p-4 border-2 border-purple-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors">
-              <FiShield className="w-5 h-5 text-purple-600 mr-2" />
-              <span className="font-medium text-purple-600">KYC Status</span>
-            </button>
+      <ContentGrid>
+        <ChartCard>
+          <ChartTitle>Évolution des Transferts</ChartTitle>
+          <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#718096' }}>
+            Graphique des transferts (Intégration Chart.js/Recharts)
           </div>
-        </motion.div>
-      </div>
-    </>
+        </ChartCard>
+
+        <RecentTransfersCard>
+          <ChartTitle>Transferts Récents</ChartTitle>
+          {mockTransfers.map((transfer) => (
+            <TransferItem key={transfer.id}>
+              <TransferInfo>
+                <div style={{ fontWeight: 500, color: '#2d3748' }}>
+                  {transfer.recipient}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#718096' }}>
+                  {new Date(transfer.date).toLocaleDateString()}
+                </div>
+              </TransferInfo>
+              <div style={{ textAlign: 'right' }}>
+                <TransferAmount type={transfer.status === 'completed' ? 'in' : 'out'}>
+                  {transfer.amount.toLocaleString()} {transfer.currency}
+                </TransferAmount>
+                <TransferStatus status={transfer.status}>
+                  {transfer.status === 'completed' ? 'Terminé' : 
+                   transfer.status === 'pending' ? 'En cours' : 'Échoué'}
+                </TransferStatus>
+              </div>
+            </TransferItem>
+          ))}
+        </RecentTransfersCard>
+      </ContentGrid>
+    </DashboardContainer>
   );
 };
 

@@ -1,17 +1,28 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { toast } from 'react-hot-toast';
+import axios from 'axios';
 
-import apiService from '../services/api';
-import { User, LoginRequest } from '../types';
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'admin' | 'bank';
+  permissions: string[];
+}
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: LoginRequest) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshUser: () => void;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+  register: (userData: RegisterData) => Promise<void>;
+}
+
+interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,95 +36,71 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const queryClient = useQueryClient();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Check if user is authenticated on mount
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
+    // Check if user is already logged in
+    const token = localStorage.getItem('authToken');
     if (token) {
-      setIsAuthenticated(true);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      fetchUser();
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
-  // Fetch current user
-  const { data: user, isLoading, refetch } = useQuery<User>(
-    'current-user',
-    apiService.getCurrentUser,
-    {
-      enabled: isAuthenticated,
-      retry: false,
-      onError: () => {
-        // Token is invalid, clear auth state
-        setIsAuthenticated(false);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-      }
+  const fetchUser = async () => {
+    try {
+      const response = await axios.get('/auth/me');
+      setUser(response.data);
+    } catch (error) {
+      localStorage.removeItem('authToken');
+      delete axios.defaults.headers.common['Authorization'];
+    } finally {
+      setIsLoading(false);
     }
-  );
-
-  // Login mutation
-  const loginMutation = useMutation(
-    (credentials: LoginRequest) => apiService.login(credentials),
-    {
-      onSuccess: (response) => {
-        localStorage.setItem('access_token', response.access_token);
-        localStorage.setItem('refresh_token', response.refresh_token);
-        localStorage.setItem('user', JSON.stringify(response.user));
-        setIsAuthenticated(true);
-        queryClient.setQueryData('current-user', response.user);
-        toast.success('Login successful!');
-      },
-      onError: (error: any) => {
-        toast.error(error.response?.data?.detail || 'Login failed');
-        throw error;
-      }
-    }
-  );
-
-  // Logout mutation
-  const logoutMutation = useMutation(
-    () => apiService.logout(),
-    {
-      onSuccess: () => {
-        setIsAuthenticated(false);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        queryClient.clear();
-        toast.success('Logged out successfully');
-      },
-      onError: () => {
-        // Even if logout fails, clear local state
-        setIsAuthenticated(false);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        queryClient.clear();
-      }
-    }
-  );
-
-  const login = async (credentials: LoginRequest) => {
-    await loginMutation.mutateAsync(credentials);
   };
 
-  const logout = async () => {
-    await logoutMutation.mutateAsync();
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await axios.post('/auth/login', { email, password });
+      const { token, user } = response.data;
+      
+      localStorage.setItem('authToken', token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      setUser(user);
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Erreur de connexion');
+    }
   };
 
-  const refreshUser = () => {
-    refetch();
+  const logout = () => {
+    localStorage.removeItem('authToken');
+    delete axios.defaults.headers.common['Authorization'];
+    setUser(null);
   };
 
-  const value: AuthContextType = {
-    user: user || null,
-    isAuthenticated,
+  const register = async (userData: RegisterData) => {
+    try {
+      const response = await axios.post('/auth/register', userData);
+      const { token, user } = response.data;
+      
+      localStorage.setItem('authToken', token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      setUser(user);
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Erreur d\'inscription');
+    }
+  };
+
+  const value = {
+    user,
+    isAuthenticated: !!user,
     isLoading,
     login,
     logout,
-    refreshUser
+    register,
   };
 
   return (

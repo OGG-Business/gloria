@@ -1,0 +1,796 @@
+---
+# Banking Transfer Platform - Kubernetes Production Deployment
+# Infrastructure cloud complète pour la production
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: banking-transfer
+  labels:
+    name: banking-transfer
+    environment: production
+---
+# ConfigMap pour la configuration de l'application
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: banking-transfer-config
+  namespace: banking-transfer
+data:
+  # Configuration backend
+  DATABASE_URL: "postgresql://banking_user:${DB_PASSWORD}@postgres-service:5432/banking_transfer"
+  REDIS_URL: "redis://redis-service:6379/0"
+  
+  # Configuration SWIFT
+  SWIFT_BIC: "PRODUS33XXX"
+  SWIFT_BANK_NAME: "Production Bank"
+  SWIFT_COUNTRY_CODE: "US"
+  SWIFT_DRY_RUN: "false"
+  
+  # Configuration Mojaloop
+  MOJALOOP_DFSP_ID: "prod-dfsp"
+  MOJALOOP_DFSP_NAME: "Production DFSP"
+  MOJALOOP_CURRENCY: "CDF"
+  MOJALOOP_COUNTRY_CODE: "CD"
+  MOJALOOP_DRY_RUN: "false"
+  
+  # Configuration sécurité
+  JWT_SECRET_KEY: "${JWT_SECRET}"
+  ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+  
+  # Configuration monitoring
+  PROMETHEUS_ENABLED: "true"
+  GRAFANA_ENABLED: "true"
+  JAEGER_ENABLED: "true"
+  
+  # Configuration logs
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+---
+# Secret pour les données sensibles
+apiVersion: v1
+kind: Secret
+metadata:
+  name: banking-transfer-secrets
+  namespace: banking-transfer
+type: Opaque
+data:
+  # Ces valeurs doivent être encodées en base64
+  DB_PASSWORD: ${DB_PASSWORD_B64}
+  JWT_SECRET: ${JWT_SECRET_B64}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY_B64}
+  SWIFT_CLIENT_CERT: ${SWIFT_CERT_B64}
+  SWIFT_CLIENT_KEY: ${SWIFT_KEY_B64}
+  SWIFT_CA_CERT: ${SWIFT_CA_B64}
+  MOJALOOP_PRIVATE_KEY: ${MOJALOOP_KEY_B64}
+  MOJALOOP_CLIENT_CERT: ${MOJALOOP_CERT_B64}
+---
+# Service PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: banking-transfer
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  type: ClusterIP
+---
+# Deployment PostgreSQL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: banking-transfer
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "banking_transfer"
+            - name: POSTGRES_USER
+              value: "banking_user"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: banking-transfer-secrets
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - banking_user
+                - -d
+                - banking_transfer
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - banking_user
+                - -d
+                - banking_transfer
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+# PVC PostgreSQL
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: banking-transfer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+# Service Redis
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: banking-transfer
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+# Deployment Redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: banking-transfer
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+# Service Backend
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: banking-transfer
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+# Deployment Backend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: banking-transfer
+  labels:
+    app: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: banking-transfer-backend:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: REDIS_URL
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: banking-transfer-secrets
+                  key: JWT_SECRET
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: banking-transfer-secrets
+                  key: ENCRYPTION_KEY
+            - name: SWIFT_BIC
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: SWIFT_BIC
+            - name: SWIFT_BANK_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: SWIFT_BANK_NAME
+            - name: MOJALOOP_DFSP_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: MOJALOOP_DFSP_ID
+            - name: MOJALOOP_DFSP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: MOJALOOP_DFSP_NAME
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: banking-transfer-config
+                  key: LOG_LEVEL
+          volumeMounts:
+            - name: swift-certs
+              mountPath: /app/certs/swift
+              readOnly: true
+            - name: mojaloop-certs
+              mountPath: /app/certs/mojaloop
+              readOnly: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: swift-certs
+          secret:
+            secretName: banking-transfer-secrets
+            items:
+              - key: SWIFT_CLIENT_CERT
+                path: client.crt
+              - key: SWIFT_CLIENT_KEY
+                path: client.key
+              - key: SWIFT_CA_CERT
+                path: ca.crt
+        - name: mojaloop-certs
+          secret:
+            secretName: banking-transfer-secrets
+            items:
+              - key: MOJALOOP_PRIVATE_KEY
+                path: private.key
+              - key: MOJALOOP_CLIENT_CERT
+                path: client.crt
+---
+# Service Frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: banking-transfer
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP
+---
+# Deployment Frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: banking-transfer
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: banking-transfer-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REACT_APP_API_URL
+              value: "https://api.banking-transfer.com"
+            - name: REACT_APP_ENVIRONMENT
+              value: "production"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+# Service Nginx (Load Balancer)
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: banking-transfer
+  labels:
+    app: nginx
+spec:
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+    - protocol: TCP
+      port: 443
+      targetPort: 443
+  type: LoadBalancer
+---
+# Deployment Nginx
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: banking-transfer
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: nginx-ssl
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "100m"
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: nginx-ssl
+          secret:
+            secretName: nginx-ssl-cert
+---
+# ConfigMap Nginx
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: banking-transfer
+data:
+  nginx.conf: |
+    events {
+      worker_connections 1024;
+    }
+    
+    http {
+      upstream backend {
+        server backend-service:8000;
+      }
+      
+      upstream frontend {
+        server frontend-service:3000;
+      }
+      
+      server {
+        listen 80;
+        server_name banking-transfer.com;
+        return 301 https://$server_name$request_uri;
+      }
+      
+      server {
+        listen 443 ssl http2;
+        server_name banking-transfer.com;
+        
+        ssl_certificate /etc/nginx/ssl/tls.crt;
+        ssl_certificate_key /etc/nginx/ssl/tls.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+        ssl_prefer_server_ciphers off;
+        
+        # API routes
+        location /api/ {
+          proxy_pass http://backend/;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        # Frontend routes
+        location / {
+          proxy_pass http://frontend/;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+      }
+    }
+---
+# Service Prometheus
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: banking-transfer
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - protocol: TCP
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP
+---
+# Deployment Prometheus
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: banking-transfer
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+---
+# ConfigMap Prometheus
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: banking-transfer
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    scrape_configs:
+      - job_name: 'banking-transfer-backend'
+        static_configs:
+          - targets: ['backend-service:8000']
+        metrics_path: '/metrics'
+        
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+---
+# Service Grafana
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: banking-transfer
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP
+---
+# Deployment Grafana
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: banking-transfer
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: banking-transfer-secrets
+                  key: GRAFANA_PASSWORD
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+---
+# Service Jaeger
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-service
+  namespace: banking-transfer
+  labels:
+    app: jaeger
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - protocol: TCP
+      port: 16686
+      targetPort: 16686
+  type: ClusterIP
+---
+# Deployment Jaeger
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: banking-transfer
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:latest
+          ports:
+            - containerPort: 16686
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+---
+# HorizontalPodAutoscaler pour le backend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: banking-transfer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Ingress pour l'exposition externe
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: banking-transfer-ingress
+  namespace: banking-transfer
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - banking-transfer.com
+        - api.banking-transfer.com
+      secretName: banking-transfer-tls
+  rules:
+    - host: banking-transfer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 3000
+    - host: api.banking-transfer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8000

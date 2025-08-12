@@ -1,31 +1,41 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { Toaster } from 'react-hot-toast';
-import { HelmetProvider } from 'react-helmet-async';
-
-// Pages
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import TransferForm from './pages/TransferForm';
-import TransferTracking from './pages/TransferTracking';
-import Admin from './pages/Admin';
-import Accounts from './pages/Accounts';
-import KYC from './pages/KYC';
-import Settings from './pages/Settings';
+import styled from 'styled-components';
 
 // Components
-import Layout from './components/common/Layout';
-import ProtectedRoute from './components/common/ProtectedRoute';
-import LoadingSpinner from './components/common/LoadingSpinner';
-
-// Hooks
-import { useAuth } from './hooks/useAuth';
+import Header from './components/Header';
+import Sidebar from './components/Sidebar';
+import Dashboard from './pages/Dashboard';
+import TransferForm from './pages/TransferForm';
+import TransferHistory from './pages/TransferHistory';
+import AccountManagement from './pages/AccountManagement';
+import KYCPortal from './pages/KYCPortal';
+import AdminPanel from './pages/AdminPanel';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
 // Styles
-import './styles/globals.css';
+const AppContainer = styled.div`
+  display: flex;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+`;
 
-// Create a client
+const MainContent = styled.main`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+`;
+
+const ContentArea = styled.div`
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+`;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -36,75 +46,39 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
-
   return (
-    <HelmetProvider>
-      <QueryClientProvider client={queryClient}>
-        <Router>
-          <div className="App">
-            <Routes>
-              {/* Public routes */}
-              <Route 
-                path="/login" 
-                element={
-                  isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
-                } 
-              />
-              
-              {/* Protected routes */}
-              <Route path="/" element={<ProtectedRoute />}>
-                <Route element={<Layout />}>
-                  <Route index element={<Navigate to="/dashboard" replace />} />
-                  <Route path="dashboard" element={<Dashboard />} />
-                  <Route path="transfer/new" element={<TransferForm />} />
-                  <Route path="transfer/:id" element={<TransferTracking />} />
-                  <Route path="accounts" element={<Accounts />} />
-                  <Route path="kyc" element={<KYC />} />
-                  <Route path="settings" element={<Settings />} />
-                  
-                  {/* Admin routes */}
-                  <Route path="admin" element={<Admin />} />
-                </Route>
-              </Route>
-              
-              {/* 404 route */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-            
-            {/* Global toast notifications */}
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                duration: 4000,
-                style: {
-                  background: '#363636',
-                  color: '#fff',
-                },
-                success: {
-                  duration: 3000,
-                  iconTheme: {
-                    primary: '#10b981',
-                    secondary: '#fff',
-                  },
-                },
-                error: {
-                  duration: 5000,
-                  iconTheme: {
-                    primary: '#ef4444',
-                    secondary: '#fff',
-                  },
-                },
-              }}
-            />
-          </div>
-        </Router>
-      </QueryClientProvider>
-    </HelmetProvider>
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <AppContainer>
+          <Sidebar />
+          <MainContent>
+            <Header />
+            <ContentArea>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/transfer/new" element={<TransferForm />} />
+                <Route path="/transfers" element={<TransferHistory />} />
+                <Route path="/accounts" element={<AccountManagement />} />
+                <Route path="/kyc" element={<KYCPortal />} />
+                <Route path="/admin" element={<AdminPanel />} />
+              </Routes>
+            </ContentArea>
+          </MainContent>
+        </AppContainer>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+          }}
+        />
+      </Router>
+    </QueryClientProvider>
   );
 }
 
