@@ -34,6 +34,7 @@ class MojaloopConnector:
             "status": "COMPLETED",
             "mojaloop_transaction_id": f"ML{request.get('id')}",
             "quote_id": f"Q{request.get('id')}",
+            "quote_id": f"Q{request.get('id')}",
             "transfer_id": f"T{request.get('id')}",
             "settlement_completed": True,
             "settlement_timestamp": datetime.now(timezone.utc).isoformat(),
