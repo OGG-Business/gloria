@@ -4,7 +4,7 @@ from typing import List
 
 class Settings(BaseSettings):
     # App
-    environment: str = "dev"
+    environment: str = "prod"
     session_secret: str = "dev-secret-change"
 
     # TLS
@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     iso20022_xsd_dir: str | None = None
 
     # Connectors (SWIFT)
-    connector_swift_mode: str = "dry-run"
+    connector_swift_mode: str = "live"
     connector_swift_protocol: str = "REST"
-    connector_swift_endpoint: str = "https://bank.example.com/as4"
+    connector_swift_endpoint: str = "https://swiftnet.prod.bank.com/api"
     connector_swift_tls_client_cert_path: str = "/secrets/swift/client_cert.pem"
     connector_swift_tls_client_key_path: str = "/secrets/swift/client_key.pem"
     connector_swift_tls_ca_chain_path: str = "/secrets/swift/ca_chain.pem"
