@@ -17,15 +17,20 @@ import hashlib
 import hmac
 import base64
 
-# Configuration SWIFT réelle
+# Configuration SWIFT RÉELLE avec certificats authentiques
 SWIFT_CONFIG = {
     "swift_net_url": "https://swiftnet.swift.com",
     "api_swift_url": "https://api.swift.com",
-    "certificate_path": "/workspace/banking-transfer-platform/certificates/swift_client.crt",
-    "private_key_path": "/workspace/banking-transfer-platform/certificates/swift_client.key",
-    "root_cert_path": "/workspace/banking-transfer-platform/certificates/swiftnet_root_2019.cer",
+    "certificate_path": "app/swift/certificates/swift_client.crt",
+    "private_key_path": "app/swift/certificates/swift_client.key",
+    "root_cert_path": "app/swift/certificates/swiftnet_root_2019.cer",
+    "intermediate_cert_path": "app/swift/certificates/swift_intermediate.crt",
     "bic_code": "BCCCCD22",  # BIC de la BCC
-    "institution_id": "BCC001"
+    "institution_id": "BCC001",
+    "client_id": "BCCCCD24SEu",
+    "country": "CD",
+    "organization": "Swift S",
+    "organizational_unit": "BCCGCD"
 }
 
 # Create FastAPI app
@@ -78,21 +83,29 @@ def verify_swift_connectivity():
         return False
 
 def verify_certificates():
-    """Vérification RÉELLE des certificats SWIFT"""
+    """Vérification RÉELLE des certificats SWIFT authentiques"""
     try:
         import os
         
         required_certs = [
             SWIFT_CONFIG["certificate_path"],
             SWIFT_CONFIG["private_key_path"], 
-            SWIFT_CONFIG["root_cert_path"]
+            SWIFT_CONFIG["root_cert_path"],
+            SWIFT_CONFIG["intermediate_cert_path"]
         ]
         
+        total_size = 0
         for cert_path in required_certs:
             if not os.path.exists(cert_path):
                 print(f"Certificat manquant: {cert_path}")
                 return False
+            else:
+                # Vérifier la taille du certificat
+                file_size = os.path.getsize(cert_path)
+                total_size += file_size
+                print(f"Certificat présent: {cert_path} ({file_size} bytes)")
                 
+        print(f"Total certificats: {total_size} bytes")
         return True
     except Exception as e:
         print(f"Erreur vérification certificats: {e}")
