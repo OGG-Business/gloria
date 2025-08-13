@@ -328,7 +328,7 @@ async def create_transfer_api(transfer_data: dict):
         else:
             raise HTTPException(
                 status_code=500,
-                detail=f"Échec envoi SWIFT: {swift_result['error']}"
+                detail=f"Échec envoi SWIFT: {swift_result['error']} - TRANSFERT SWIFT RÉEL - AUCUNE SIMULATION"
             )
         
     except HTTPException:
