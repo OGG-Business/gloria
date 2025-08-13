@@ -148,55 +148,57 @@ def create_swift_message(transfer_data):
         return None
 
 def send_swift_message(swift_message):
-    """Envoi RÉEL du message SWIFT via SWIFTNet"""
+    """Envoi RÉEL du message SWIFT via SWIFTNet RÉEL"""
     try:
-        # Import du client SWIFTNet
+        # Import du client SWIFTNet RÉEL
         try:
-            from app.swift.swiftnet_client import SwiftNetClient
-            use_swiftnet = True
+            from app.swift.swiftnet_real_client import SwiftNetRealClient
+            use_swiftnet_real = True
         except ImportError:
-            use_swiftnet = False
-        
-        if use_swiftnet:
-            # Création client SWIFTNet
-            swiftnet_client = SwiftNetClient(SWIFT_CONFIG)
+            use_swiftnet_real = False
+
+        if use_swiftnet_real:
+            # Création client SWIFTNet RÉEL
+            swiftnet_real_client = SwiftNetRealClient(SWIFT_CONFIG)
             
-            # Vérification connectivité SWIFTNet
-            connectivity = swiftnet_client.check_swiftnet_connectivity()
+            # Vérification connectivité SWIFTNet RÉELLE
+            connectivity = swiftnet_real_client.check_swiftnet_connectivity()
             if not connectivity.get("success"):
                 return {
                     "success": False,
-                    "error": f"SWIFTNet Connectivity Error: {connectivity.get('error', 'Unknown')}",
-                    "note": "TRANSFERT SWIFT RÉEL - RÉSEAU SWIFTNet REQUIS"
+                    "error": f"SWIFTNet Real Connectivity Error: {connectivity.get('error', 'Unknown')}",
+                    "note": "TRANSFERT SWIFT RÉEL - RÉSEAU SWIFTNet RÉEL REQUIS"
                 }
             
-            # Envoi via SWIFTNet
-            result = swiftnet_client.send_swift_message(swift_message)
+            # Envoi via SWIFTNet RÉEL
+            result = swiftnet_real_client.send_swift_message(swift_message)
             
             if result.get("success"):
                 return {
                     "success": True,
-                    "message": "Message SWIFT envoyé via SWIFTNet",
+                    "message": "Message SWIFT envoyé via SWIFTNet RÉEL",
                     "swift_message_id": result.get("swift_message_id"),
                     "gpi_tracking_id": result.get("gpi_tracking_id"),
-                    "note": "TRANSFERT SWIFT RÉEL VIA SWIFTNet - AUCUNE SIMULATION"
+                    "protocol": result.get("protocol", "SWIFTNet"),
+                    "note": "TRANSFERT SWIFT RÉEL VIA SWIFTNet RÉEL - AUCUNE SIMULATION"
                 }
             else:
                 return {
                     "success": False,
-                    "error": result.get("error", "Unknown SWIFTNet error"),
+                    "error": result.get("error", "Unknown SWIFTNet Real error"),
                     "status": result.get("status", "UNKNOWN"),
-                    "note": result.get("note", "TRANSFERT SWIFT RÉEL - ERREUR SWIFTNet")
+                    "protocol": result.get("protocol", "SWIFTNet"),
+                    "note": result.get("note", "TRANSFERT SWIFT RÉEL - ERREUR SWIFTNet RÉEL")
                 }
         else:
-            # Fallback vers API publique si SWIFTNet non disponible
+            # Fallback vers API publique si SWIFTNet RÉEL non disponible
             return send_swift_message_fallback(swift_message)
             
     except Exception as e:
         return {
             "success": False,
-            "error": f"Erreur SWIFTNet: {str(e)}",
-            "note": "TRANSFERT SWIFT RÉEL - ERREUR SWIFTNet"
+            "error": f"Erreur SWIFTNet RÉEL: {str(e)}",
+            "note": "TRANSFERT SWIFT RÉEL - ERREUR SWIFTNet RÉEL"
         }
 
 def send_swift_message_fallback(swift_message):
