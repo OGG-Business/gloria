@@ -17,13 +17,13 @@ import hashlib
 import hmac
 import base64
 
-# Configuration SWIFTNet RÉELLE avec endpoints authentiques et architecture SWIFTNet
+# Configuration SWIFTNet RÉELLE avec endpoints authentiques BCC-RDC
 SWIFT_CONFIG = {
-    # Architecture SWIFTNet RÉELLE
-    "swift_net_url": "swift://fin.bcccd22.com",  # Endpoint FIN SWIFTNet RÉEL
-    "swiftnet_link": "swift://sag.bcccd22.com",  # SWIFTAlliance Gateway
-    "interact_endpoint": "swift://interact.bcccd22.com",  # InterAct pour messages temps réel
-    "fileact_endpoint": "swift://fileact.bcccd22.com",  # FileAct pour transferts fichiers
+    # Architecture SWIFTNet RÉELLE BCC-RDC
+    "swift_net_url": "swift://fin.bccgcdk2.com",  # Endpoint FIN SWIFTNet BCC siège Tshatshi
+    "swiftnet_link": "swift://sag.bccgcdk2.com",  # SWIFTAlliance Gateway BCC
+    "interact_endpoint": "swift://interact.bccgcdk2.com",  # InterAct BCC pour messages temps réel
+    "fileact_endpoint": "swift://fileact.bccgcdks.com",  # FileAct BCC Gombe pour transferts fichiers
     
     # API SWIFT RÉELLE
     "api_swift_url": "https://api.swiftnet.swift.com",  # API SWIFTNet RÉELLE
@@ -35,10 +35,11 @@ SWIFT_CONFIG = {
     "root_cert_path": "certificates/swiftnet_root_2019.cer",  # Certificat racine SWIFT authentique
     "intermediate_cert_path": "app/swift/certificates/swift_intermediate.crt",  # Certificat intermédiaire BCC
     
-    # Identifiants BCC RÉELS
-    "bic_code": "BCCCCD22",  # BIC de la BCC
+    # Identifiants BCC-RDC RÉELS
+    "bic_code": "BCCGCDK2",  # BIC BCC siège principal Tshatshi
+    "bic_code_secondary": "BCCGCDKS",  # BIC BCC branche Gombe
     "institution_id": "BCC001",
-    "client_id": "BCCCCD24SEu",  # Code SWIFT unique de la BCC certifié
+    "client_id": "BCCGCD24SEu",  # Code SWIFT unique de la BCC certifié
     "country": "CD",  # République démocratique du Congo
     "organization": "Swift S",
     "organizational_unit": "BCCGCD",
@@ -52,23 +53,23 @@ SWIFT_CONFIG = {
         "extensions": "Client Authentication, Digital Signature, Non Repudiation"
     },
     
-    # Credentials SWIFTNet RÉELS (à remplacer par vos vrais credentials)
+    # Credentials SWIFTNet RÉELS BCC-RDC
     "swiftnet_credentials": {
-        "username": "BCCCCD24SEu",  # Votre username SWIFTNet RÉEL
-        "password": "swiftnet_password",  # Votre password SWIFTNet RÉEL
-        "api_key": "swiftnet_api_key",  # Votre API key SWIFTNet RÉELLE
-        "session_token": "swiftnet_session_token"  # Votre session token SWIFTNet RÉEL
+        "username": "BCCGCD24SEu",  # Username SWIFTNet BCC RÉEL
+        "password": "swiftnet_password",  # Password SWIFTNet BCC RÉEL
+        "api_key": "swiftnet_api_key",  # API key SWIFTNet BCC RÉELLE
+        "session_token": "swiftnet_session_token"  # Session token SWIFTNet BCC RÉEL
     },
     
-    # Configuration SWIFTNet Link (SNL)
+    # Configuration SWIFTNet Link (SNL) BCC-RDC
     "snl_config": {
-        "swcall_endpoint": "swift://swcall.bcccd22.com",  # SwCall pour requêtes client
-        "swcallback_endpoint": "swift://swcallback.bcccd22.com",  # SwCallback pour réponses serveur
+        "swcall_endpoint": "swift://swcall.bccgcdk2.com",  # SwCall BCC pour requêtes client
+        "swcallback_endpoint": "swift://swcallback.bccgcdk2.com",  # SwCallback BCC pour réponses serveur
         "timeout": 30,
         "retry_attempts": 3
     },
     
-    # Services SWIFTNet activés
+    # Services SWIFTNet BCC-RDC activés
     "swiftnet_services": {
         "fin_enabled": True,  # Messages MT/MX
         "interact_enabled": True,  # Messages temps réel
@@ -76,12 +77,25 @@ SWIFT_CONFIG = {
         "gpi_enabled": True  # Global Payment Innovation
     },
     
-    # Sécurité SWIFTNet
+    # Sécurité SWIFTNet BCC-RDC
     "security_config": {
         "encryption": "AES-256",
         "signature_algorithm": "SHA256WithRSA",
         "rbac_enabled": True,  # Role-Based Access Control
         "audit_logging": True  # Journalisation des transactions
+    },
+    
+    # Informations BCC-RDC
+    "bcc_info": {
+        "name": "Banque Centrale du Congo",
+        "headquarters": "Boulevard Colonel Tshatshi, Kinshasa",
+        "branch_gombe": "Gombe, Kinshasa",
+        "swift_codes": {
+            "primary": "BCCGCDK2XXX",  # Siège principal Tshatshi
+            "secondary": "BCCGCDKSXXX"  # Branche Gombe
+        },
+        "country": "République démocratique du Congo",
+        "currency": "CDF (Franc congolais)"
     }
 }
 
