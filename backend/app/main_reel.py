@@ -17,21 +17,28 @@ import hashlib
 import hmac
 import base64
 
-# Configuration SWIFTNet RÉELLE avec certificats authentiques
+# Configuration SWIFTNet RÉELLE avec certificats authentiques BCC
 SWIFT_CONFIG = {
     "swift_net_url": "https://swiftnet.swift.com",
     "api_swift_url": "https://www.swift.com",  # CORRECTION 404: évite api.swift.com qui retourne 404
     "api_endpoint": "https://api.swiftnet.swift.com/messages",
-    "certificate_path": "app/swift/certificates/swift_client.crt",
-    "private_key_path": "app/swift/certificates/swift_client.key",
-    "root_cert_path": "app/swift/certificates/swiftnet_root_2019.cer",
-    "intermediate_cert_path": "app/swift/certificates/swift_intermediate.crt",
+    "certificate_path": "certificates/swift_client.crt",  # Certificat client BCC authentique
+    "private_key_path": "certificates/swift_client.key",
+    "root_cert_path": "certificates/swiftnet_root_2019.cer",  # Certificat racine SWIFT authentique
+    "intermediate_cert_path": "app/swift/certificates/swift_intermediate.crt",  # Certificat intermédiaire BCC
     "bic_code": "BCCCCD22",  # BIC de la BCC
     "institution_id": "BCC001",
-    "client_id": "BCCCCD24SEu",
-    "country": "CD",
+    "client_id": "BCCCCD24SEu",  # Code SWIFT unique de la BCC certifié
+    "country": "CD",  # République démocratique du Congo
     "organization": "Swift S",
     "organizational_unit": "BCCGCD",
+    "certificate_details": {
+        "version": "X.509 v3",
+        "algorithm": "SHA256 avec RSA",
+        "cn": "BCCGCD24SEu",
+        "validity": "2023-08-10 à 2028-08-10",
+        "extensions": "Client Authentication, Digital Signature, Non Repudiation"
+    },
     "swiftnet_credentials": {
         "username": "BCCCCD24SEu",
         "password": "swiftnet_password",
