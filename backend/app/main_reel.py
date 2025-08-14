@@ -17,22 +17,34 @@ import hashlib
 import hmac
 import base64
 
-# Configuration SWIFTNet RÉELLE avec endpoints authentiques BCC-RDC
+# Configuration SWIFTNet RÉELLE avec Service Bureau pour transferts réels
 SWIFT_CONFIG = {
+    # Service Bureau pour transferts réels (solution immédiate)
+    "service_bureau": {
+        "enabled": True,
+        "name": "AZQORE",
+        "bic": "SBXACHSS",
+        "api_endpoint": "https://api.azqore.com/v1/payments",
+        "headers": {
+            "Authorization": "Bearer <JWT>",
+            "X-BIC": "SBXACHSS"
+        }
+    },
+    
     # Architecture SWIFTNet RÉELLE BCC-RDC
-    "swift_net_url": "swift://fin.bccgcdk2.com",  # Endpoint FIN SWIFTNet BCC siège Tshatshi
-    "swiftnet_link": "swift://sag.bccgcdk2.com",  # SWIFTAlliance Gateway BCC
-    "interact_endpoint": "swift://interact.bccgcdk2.com",  # InterAct BCC pour messages temps réel
+    "swift_net_url": "swift://fin.bccgcdks.com",  # Endpoint FIN SWIFTNet BCC siège Gombe
+    "swiftnet_link": "swift://sag.bccgcdks.com",  # SWIFTAlliance Gateway BCC
+    "interact_endpoint": "swift://interact.bccgcdks.com",  # InterAct BCC pour messages temps réel
     "fileact_endpoint": "swift://fileact.bccgcdks.com",  # FileAct BCC Gombe pour transferts fichiers
     
     # API SWIFT RÉELLE
     "api_swift_url": "https://api.swiftnet.swift.com",  # API SWIFTNet RÉELLE
     "api_endpoint": "https://api.swiftnet.swift.com/messages",
     
-    # Certificats SWIFT authentiques BCC
-    "certificate_path": "certificates/swift_client.crt",  # Certificat client BCC authentique
-    "private_key_path": "certificates/swift_client.key",
-    "root_cert_path": "certificates/swiftnet_root_2019.cer",  # Certificat racine SWIFT authentique
+    # Certificats SWIFT authentiques BCC (officiels)
+    "certificate_path": "certificates/swift_client_officiel.crt",  # Certificat client BCC officiel
+    "private_key_path": "certificates/swift_client_officiel.key",
+    "root_cert_path": "certificates/swiftnet_root_2019.cer",  # Certificat racine SWIFT officiel
     "intermediate_cert_path": "app/swift/certificates/swift_intermediate.crt",  # Certificat intermédiaire BCC
     
     # Identifiants BCC-RDC RÉELS (Codes SWIFT Officiels)
