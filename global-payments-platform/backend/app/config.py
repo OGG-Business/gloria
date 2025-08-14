@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     connector_swift_sftp_key_path: str | None = None
     connector_swift_sftp_remote_dir: str | None = None
 
+    # Connectors (AZQORE Service Bureau)
+    connector_azqore_api_url: str = "https://api.azqore.com"
+    connector_azqore_bic: str = "SBXACHSS"
+    connector_azqore_jwt_token: str | None = None
+
     # PSD2 (BNP Paribas)
     psd2_base_url: str = "https://psd2.api.cib.bnpparibas.com"
     psd2_api_key_header_name: str = "AddAPIKey"

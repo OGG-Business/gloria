@@ -1,8 +1,24 @@
 # SWIFT/BANK CONNECTIVITY ONBOARDING GUIDE
 
-This guide details the exact artifacts to request from your bank/SWIFT partner and the steps to activate real transfers in production.
+This guide details the exact artifacts to request from your bank/SWIFT partner or Service Bureau and the steps to activate real transfers in production.
 
-## Required artifacts from bank/partner
+## Primary Integration Method: AZQORE Service Bureau
+
+The platform is now primarily configured to work via a Service Bureau, specifically AZQORE. This method uses a REST API with JWT authentication instead of direct mTLS connection to SWIFT.
+
+### Required Configuration for AZQORE
+You must configure the following environment variables:
+- `CONNECTOR_AZQORE_API_URL`: The base URL for the AZQORE API (e.g., `https://api.azqore.com`).
+- `CONNECTOR_AZQORE_BIC`: Your assigned Service Bureau BIC (e.g., `SBXACHSS`).
+- `CONNECTOR_AZQORE_JWT_TOKEN`: A valid JWT obtained from AZQORE for authentication. This is a sensitive secret.
+
+---
+
+## Legacy Integration Method: Direct SWIFT Connection
+
+This details the original direct mTLS/SFTP connection method. This is no longer the primary, tested integration.
+
+### Required artifacts from bank/partner
 - Endpoints: hostnames/IPs for Test and Prod, protocols (AS4/SFTP/REST)
 - Bank BIC(s), enterprise identifiers (e.g., DN), gpi details (if applicable)
 - X.509 certificates: client cert/key, server certs, full CA trust chain, CRL/OCSP info

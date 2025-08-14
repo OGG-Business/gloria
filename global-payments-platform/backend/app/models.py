@@ -38,7 +38,11 @@ class Transfer(Base):
     currency = Column(String(3), nullable=False)
     status = Column(Enum(TransferStatus), default=TransferStatus.INITIATED, index=True)
     reference = Column(String, index=True)
-    pacs008_xml = Column(Text)
+
+    # Fields for Service Bureau (e.g., AZQORE) integration
+    quotation_id = Column(String, nullable=True, index=True)
+    transaction_id = Column(String, nullable=True, index=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
