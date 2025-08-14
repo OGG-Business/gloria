@@ -1,0 +1,204 @@
+{
+  "backend_port": true,
+  "endpoint__": 200,
+  "endpoint__health": 200,
+  "endpoint__api_health": 200,
+  "endpoint__api_swift_status": 200,
+  "dns_swift.com": "23.48.203.246",
+  "port_443_swift.com": true,
+  "ssl_swift.com": {
+    "valid": true,
+    "subject": [
+      [
+        [
+          "countryName",
+          "BE"
+        ]
+      ],
+      [
+        [
+          "stateOrProvinceName",
+          "Wallonia"
+        ]
+      ],
+      [
+        [
+          "localityName",
+          "La Hulpe"
+        ]
+      ],
+      [
+        [
+          "organizationName",
+          "S.W.I.F.T. SC"
+        ]
+      ],
+      [
+        [
+          "commonName",
+          "www.swift.com"
+        ]
+      ]
+    ],
+    "expires": "May 30 23:59:59 2026 GMT"
+  },
+  "dns_api.swift.com": "23.212.249.211",
+  "port_443_api.swift.com": true,
+  "ssl_api.swift.com": {
+    "valid": true,
+    "subject": [
+      [
+        [
+          "countryName",
+          "BE"
+        ]
+      ],
+      [
+        [
+          "stateOrProvinceName",
+          "Wallonia"
+        ]
+      ],
+      [
+        [
+          "localityName",
+          "La Hulpe"
+        ]
+      ],
+      [
+        [
+          "organizationName",
+          "S.W.I.F.T. SC"
+        ]
+      ],
+      [
+        [
+          "commonName",
+          "www.swift.com"
+        ]
+      ]
+    ],
+    "expires": "May 30 23:59:59 2026 GMT"
+  },
+  "dns_swiftnet.swift.com": "Error: [Errno -2] Name or service not known",
+  "dns_www.swift.com": "23.212.249.91",
+  "port_443_www.swift.com": true,
+  "ssl_www.swift.com": {
+    "valid": true,
+    "subject": [
+      [
+        [
+          "countryName",
+          "BE"
+        ]
+      ],
+      [
+        [
+          "stateOrProvinceName",
+          "Wallonia"
+        ]
+      ],
+      [
+        [
+          "localityName",
+          "La Hulpe"
+        ]
+      ],
+      [
+        [
+          "organizationName",
+          "S.W.I.F.T. SC"
+        ]
+      ],
+      [
+        [
+          "commonName",
+          "www.swift.com"
+        ]
+      ]
+    ],
+    "expires": "May 30 23:59:59 2026 GMT"
+  },
+  "get_api.swift.com": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "236",
+      "X-Request-ID": "rrt-3629931414733775845-b-geu2-3874072-19796505-1",
+      "Date": "Wed, 13 Aug 2025 05:51:21 GMT",
+      "Connection": "keep-alive",
+      "FromAkamai": "True"
+    }
+  },
+  "get_api.swift.com_": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "236",
+      "X-Request-ID": "rrt-6493321218316102987-a-geu2-166594-19997356-1",
+      "Date": "Wed, 13 Aug 2025 05:51:21 GMT",
+      "Connection": "keep-alive",
+      "FromAkamai": "True"
+    }
+  },
+  "get_api.swift.com_messages": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "236",
+      "X-Request-ID": "rrt-3629931414733775845-b-geu2-3874072-19796505-2",
+      "Date": "Wed, 13 Aug 2025 05:51:22 GMT",
+      "Connection": "keep-alive",
+      "FromAkamai": "True"
+    }
+  },
+  "get_api.swift.com_health": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "236",
+      "X-Request-ID": "rrt-1194734332845840335-b-geu2-931885-20590109-169",
+      "Date": "Wed, 13 Aug 2025 05:51:22 GMT",
+      "Connection": "keep-alive",
+      "FromAkamai": "True"
+    }
+  },
+  "get_api.swift.com_status": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "236",
+      "X-Request-ID": "rrt-1194734332845840335-b-geu2-931885-20590109-170",
+      "Date": "Wed, 13 Aug 2025 05:51:22 GMT",
+      "Connection": "keep-alive",
+      "FromAkamai": "True"
+    }
+  },
+  "cert_swift_client.crt": {
+    "exists": true,
+    "size": 1653
+  },
+  "cert_swift_client.key": {
+    "exists": true,
+    "size": 1283
+  },
+  "cert_swiftnet_root_2019.cer": {
+    "exists": true,
+    "size": 1996
+  },
+  "transfer_response": {
+    "detail": "\u00c9chec envoi SWIFT: SWIFT API Error: 404"
+  },
+  "transfer_status": 500,
+  "transfer_duration": 0.198931,
+  "swift_url_used": "https://api.swift.com/messages",
+  "swift_headers": true,
+  "direct_swift_get": {
+    "status": 404,
+    "response": "\n                {\n                \"status\": {\n                \"severity\" : \"Fatal\",\n                \"code\": \"SwAP590\",\n                \"text\": \"Invalid Request. Resource does not exist.\"\n            "
+  },
+  "direct_swift_post": {
+    "status": 404,
+    "response": "\n                {\n                \"status\": {\n                \"severity\" : \"Fatal\",\n                \"code\": \"SwAP590\",\n                \"text\": \"Invalid Request. Resource does not exist.\"\n            "
+  }
+}

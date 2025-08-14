@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.10">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>SWIFTBCC-MONESE-20250812071522</MsgId>
+      <CreDtTm>2025-08-12T07:15:22.522595</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>777.00</CtrlSum>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <InstrId>BCC-MONESE-20250812071522</InstrId>
+        <EndToEndId>M40282987</EndToEndId>
+      </PmtId>
+      <Amt>
+        <InstdAmt Ccy="USD">777.00</InstdAmt>
+      </Amt>
+      <IntrmyAgt1>
+        <FinInstnId>
+          <BICFI>BCCRCD22</BICFI>
+        </FinInstnId>
+      </IntrmyAgt1>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>LHVBEE22</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+      <CdtrAcct>
+        <Id>
+          <Othr>
+            <Id>EE047700771001660150</Id>
+          </Othr>
+        </Id>
+      </CdtrAcct>
+      <Cdtr>
+        <Nm>Monese Ltd</Nm>
+      </Cdtr>
+      <RmtInf>
+        <UETR>M40282987</UETR>
+      </RmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>
