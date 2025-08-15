@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     # Connectors (AZQORE Service Bureau)
     connector_azqore_api_url: str = "https://api.azqore.com"
     connector_azqore_bic: str = "SBXACHSS"
-    connector_azqore_jwt_token: str | None = None
+
+    # Keycloak Client for AZQORE Token
+    keycloak_azqore_client_id: str | None = None
+    keycloak_azqore_client_secret: str | None = None
 
     # PSD2 (BNP Paribas)
     psd2_base_url: str = "https://psd2.api.cib.bnpparibas.com"

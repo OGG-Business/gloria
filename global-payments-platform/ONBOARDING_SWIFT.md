@@ -7,10 +7,13 @@ This guide details the exact artifacts to request from your bank/SWIFT partner o
 The platform is now primarily configured to work via a Service Bureau, specifically AZQORE. This method uses a REST API with JWT authentication instead of direct mTLS connection to SWIFT.
 
 ### Required Configuration for AZQORE
-You must configure the following environment variables:
+To enable the AZQORE integration, you must first configure a "Client" within your Keycloak realm that is authorized to request tokens. This client should use the "Client Credentials" flow.
+
+Once the client is created in Keycloak, you must configure the following environment variables for this application:
 - `CONNECTOR_AZQORE_API_URL`: The base URL for the AZQORE API (e.g., `https://api.azqore.com`).
 - `CONNECTOR_AZQORE_BIC`: Your assigned Service Bureau BIC (e.g., `SBXACHSS`).
-- `CONNECTOR_AZQORE_JWT_TOKEN`: A valid JWT obtained from AZQORE for authentication. This is a sensitive secret.
+- `KEYCLOAK_AZQORE_CLIENT_ID`: The "Client ID" of the client you created in Keycloak.
+- `KEYCLOAK_AZQORE_CLIENT_SECRET`: The "Client Secret" for that client. This is a sensitive value.
 
 ---
 

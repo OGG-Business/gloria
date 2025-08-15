@@ -1,24 +1,29 @@
 import httpx
 import os
 from typing import Dict, Any
+from app.auth.keycloak_service import KeycloakService
 
 class AzqoreConnector:
     """
     Connector for initiating payments through the AZQORE Service Bureau API.
+    It uses Keycloak to dynamically fetch bearer tokens.
     """
     def __init__(self, settings):
         self.settings = settings
         self.base_url = settings.connector_azqore_api_url
         self.bic = settings.connector_azqore_bic
-        # The JWT token should be securely managed and rotated.
-        # For this implementation, we read it from an environment variable.
-        self.jwt_token = settings.connector_azqore_jwt_token
-        if not self.jwt_token:
-            raise ValueError("AZQORE JWT token is not configured.")
+        # Instantiate the Keycloak service to handle token fetching
+        self.keycloak_service = KeycloakService(settings)
 
     async def _get_auth_headers(self) -> Dict[str, str]:
+        """
+        Dynamically fetches a JWT from Keycloak and prepares the auth headers.
+        """
+        # Get a fresh (or cached) token from our service
+        jwt_token = await self.keycloak_service.get_access_token()
+
         return {
-            "Authorization": f"Bearer {self.jwt_token}",
+            "Authorization": f"Bearer {jwt_token}",
             "X-BIC": self.bic,
             "Content-Type": "application/json",
         }
